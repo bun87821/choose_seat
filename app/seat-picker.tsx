@@ -290,7 +290,7 @@ export default function SeatPicker() {
                           title={reservation ? `${reservation.name}・${seatLabel(seat)}` : seatLabel(seat)}
                         >
                           <span>{seat.number}</span>
-                          {reservation && <small>取消</small>}
+                          {reservation && <small>{reservation.name}</small>}
                         </button>
                       );
                     })}

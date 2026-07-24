@@ -129,16 +129,16 @@ input:disabled { color: #718078; background: #eef2ee; }
 .section-tabs b { font-size: 15px; }
 .section-tabs span { font-size: 11px; opacity: .8; }
 
-.seat-map { min-height: 268px; display: grid; align-content: center; gap: 12px; overflow-x: auto; padding: 8px 0 18px; }
+.seat-map { min-height: 286px; display: grid; align-content: center; gap: 12px; overflow-x: auto; padding: 8px 0 18px; }
 .seat-row { min-width: 620px; display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 10px; }
 .seat-row > b { color: #62736a; font-size: 12px; text-align: right; }
 .seat-row > div { display: flex; justify-content: center; gap: 9px; }
-.seat-button { width: 48px; height: 42px; position: relative; display: grid; place-items: center; border: 1px solid #aabbb0; border-radius: 8px 8px 12px 12px; color: var(--ink); background: #fff; cursor: pointer; transition: transform .16s ease, background .16s ease; }
+.seat-button { width: 54px; height: 50px; position: relative; display: grid; grid-template-rows: auto auto; place-items: center; gap: 1px; padding: 5px 4px 4px; border: 1px solid #aabbb0; border-radius: 8px 8px 12px 12px; color: var(--ink); background: #fff; cursor: pointer; transition: transform .16s ease, background .16s ease; }
 .seat-button:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--green-bright); box-shadow: 0 5px 12px rgba(23,75,50,.12); }
 .seat-button.selected { border-color: var(--orange); color: white; background: var(--orange); }
 .seat-button.occupied { border-color: #d4d9d5; color: #6f7b74; background: #e5e8e6; cursor: pointer; }
 .seat-button.mine { border: 2px solid var(--green-bright); color: var(--green); background: var(--mint); cursor: pointer; }
-.seat-button small { position: absolute; bottom: 2px; font-size: 8px; font-weight: 800; }
+.seat-button small { width: 100%; overflow: hidden; color: inherit; font-size: 9px; font-weight: 800; line-height: 1.1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 
 .confirm-bar { margin-top: 18px; padding: 17px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-radius: 15px; background: #f4f6f2; }
 .confirm-bar div { display: grid; gap: 3px; }
