@@ -19,7 +19,7 @@ type Seat = {
   number: number;
 };
 
-const TOTAL_SEATS = 70;
+const TOTAL_SEATS = 71;
 
 const sectionSeats: Record<"B1" | "B2", Seat[]> = {
   B1: [
@@ -27,7 +27,7 @@ const sectionSeats: Record<"B1" | "B2", Seat[]> = {
       Array.from({ length: 9 }, (_, index) => ({ row, number: index + 4 })),
     ),
     ...Array.from({ length: 8 }, (_, index) => ({ row: 15, number: index + 5 })),
-    ...Array.from({ length: 9 }, (_, index) => ({ row: 16, number: index + 6 })),
+    ...Array.from({ length: 10 }, (_, index) => ({ row: 16, number: index + 5 })),
   ].map(({ row, number }) => ({
     key: `B1-${row}-${number}`,
     section: "B1" as const,

@@ -13,14 +13,14 @@ type ReservationRow = {
   created_at: Date | string;
 };
 
-const TOTAL_SEATS = 70;
+const TOTAL_SEATS = 71;
 
 const validSeats = new Set([
   ...[12, 13, 14].flatMap((row) =>
     Array.from({ length: 9 }, (_, index) => `B1-${row}-${index + 4}`),
   ),
   ...Array.from({ length: 8 }, (_, index) => `B1-15-${index + 5}`),
-  ...Array.from({ length: 9 }, (_, index) => `B1-16-${index + 6}`),
+  ...Array.from({ length: 10 }, (_, index) => `B1-16-${index + 5}`),
   ...Array.from({ length: 6 }, (_, index) => `B2-14-${index + 7}`),
   ...[15, 16].flatMap((row) =>
     Array.from({ length: 10 }, (_, index) => `B2-${row}-${index + 5}`),

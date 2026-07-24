@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "員工旅遊｜新莊棒球場座位劃位",
-  description: "8/7 員工旅遊棒球賽座位劃位，共 70 席。",
+  description: "8/7 員工旅遊棒球賽座位劃位，共 71 席。",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
