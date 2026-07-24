@@ -228,7 +228,7 @@ export default function SeatPicker() {
             <input
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="選填，例如：竹科"
+              placeholder="選填，例如：ISDD-01"
               maxLength={40}
             />
           </label>
