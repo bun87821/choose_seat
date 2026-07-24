@@ -1,0 +1,51 @@
+import { Pool } from "pg";
+
+const globalForDb = globalThis as typeof globalThis & {
+  railwaySeatPool?: Pool;
+  railwaySeatSchemaPromise?: Promise<void>;
+};
+
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL is missing. Add a PostgreSQL service and expose its DATABASE_URL to this service.",
+  );
+}
+
+export const pool =
+  globalForDb.railwaySeatPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl:
+      process.env.PGSSL === "true"
+        ? { rejectUnauthorized: false }
+        : undefined,
+    max: 10,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.railwaySeatPool = pool;
+}
+
+export function ensureSchema() {
+  if (!globalForDb.railwaySeatSchemaPromise) {
+    globalForDb.railwaySeatSchemaPromise = pool
+      .query(
+        `CREATE TABLE IF NOT EXISTS reservations (
+          seat_key TEXT PRIMARY KEY,
+          section TEXT NOT NULL,
+          row_number INTEGER NOT NULL,
+          seat_number INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          reservation_key TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`,
+      )
+      .then(() => undefined)
+      .catch((error) => {
+        globalForDb.railwaySeatSchemaPromise = undefined;
+        throw error;
+      });
+  }
+  return globalForDb.railwaySeatSchemaPromise;
+}
