@@ -10,21 +10,24 @@ type ReservationRow = {
   seat_number: number;
   name: string;
   note: string;
-  reservation_key: string;
   created_at: Date | string;
 };
 
+const TOTAL_SEATS = 70;
+
 const validSeats = new Set([
-  ...[12, 13, 14, 15, 16].flatMap((row) =>
+  ...[12, 13, 14].flatMap((row) =>
     Array.from({ length: 9 }, (_, index) => `B1-${row}-${index + 4}`),
   ),
+  ...Array.from({ length: 8 }, (_, index) => `B1-15-${index + 5}`),
+  ...Array.from({ length: 9 }, (_, index) => `B1-16-${index + 6}`),
   ...Array.from({ length: 6 }, (_, index) => `B2-14-${index + 7}`),
   ...[15, 16].flatMap((row) =>
     Array.from({ length: 10 }, (_, index) => `B2-${row}-${index + 5}`),
   ),
 ]);
 
-function serialize(row: ReservationRow, requesterKey: string) {
+function serialize(row: ReservationRow) {
   return {
     seatKey: row.seat_key,
     section: row.section,
@@ -32,7 +35,6 @@ function serialize(row: ReservationRow, requesterKey: string) {
     number: row.seat_number,
     name: row.name,
     note: row.note,
-    isMine: Boolean(requesterKey && row.reservation_key === requesterKey),
     createdAt:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
@@ -40,19 +42,16 @@ function serialize(row: ReservationRow, requesterKey: string) {
   };
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     await ensureSchema();
-    const requesterKey =
-      new URL(request.url).searchParams.get("reservationKey") ?? "";
     const result = await pool.query<ReservationRow>(
-      `SELECT seat_key, section, row_number, seat_number, name, note,
-              reservation_key, created_at
+      `SELECT seat_key, section, row_number, seat_number, name, note, created_at
        FROM reservations
        ORDER BY section, row_number, seat_number`,
     );
     return Response.json({
-      reservations: result.rows.map((row) => serialize(row, requesterKey)),
+      reservations: result.rows.map((row) => serialize(row)),
     });
   } catch (error) {
     console.error("GET /api/reservations failed", error);
@@ -81,11 +80,15 @@ export async function POST(request: Request) {
     const seats = payload.seats ?? [];
     const name = payload.name?.trim() ?? "";
     const note = payload.note?.trim() ?? "";
-    const reservationKey = payload.reservationKey?.trim() ?? "";
+    const reservationKey =
+      payload.reservationKey?.trim() ||
+      (typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
     if (
       !seats.length ||
-      seats.length > 71 ||
+      seats.length > TOTAL_SEATS ||
       new Set(seats.map((seat) => seat.key)).size !== seats.length ||
       seats.some((seat) => {
         const seatKey = `${seat.section}-${Number(seat.row)}-${Number(seat.number)}`;
@@ -101,8 +104,7 @@ export async function POST(request: Request) {
     if (
       !name ||
       name.length > 30 ||
-      note.length > 40 ||
-      reservationKey.length < 20
+      note.length > 40
     ) {
       return Response.json(
         { error: "請確認姓名與備註內容。" },
@@ -111,10 +113,6 @@ export async function POST(request: Request) {
     }
 
     await client.query("BEGIN");
-    await client.query(
-      "DELETE FROM reservations WHERE reservation_key = $1",
-      [reservationKey],
-    );
     for (const seat of seats) {
       await client.query(
         `INSERT INTO reservations
@@ -159,28 +157,15 @@ export async function DELETE(request: Request) {
   try {
     await ensureSchema();
     const payload = (await request.json()) as {
-      reservationKey?: string;
       seatKey?: string;
     };
-    const reservationKey = payload.reservationKey?.trim() ?? "";
     const seatKey = payload.seatKey?.trim() ?? "";
 
-    if (reservationKey.length < 20) {
+    if (!seatKey || !validSeats.has(seatKey)) {
       return Response.json({ error: "無效的劃位資料" }, { status: 400 });
     }
 
-    if (seatKey) {
-      await pool.query(
-        `DELETE FROM reservations
-         WHERE reservation_key = $1 AND seat_key = $2`,
-        [reservationKey, seatKey],
-      );
-    } else {
-      await pool.query(
-        "DELETE FROM reservations WHERE reservation_key = $1",
-        [reservationKey],
-      );
-    }
+    await pool.query("DELETE FROM reservations WHERE seat_key = $1", [seatKey]);
     return Response.json({ ok: true });
   } catch (error) {
     console.error("DELETE /api/reservations failed", error);

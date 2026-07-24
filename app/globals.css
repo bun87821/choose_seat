@@ -107,7 +107,7 @@ input:disabled { color: #718078; background: #eef2ee; }
 .my-seat span { font-size: 12px; font-weight: 800; color: var(--green-bright); }
 .my-seat strong { font-size: 20px; }
 .my-seat small { color: #718078; }
-.my-seat button, .roster-actions button { padding: 9px 13px; border: 1px solid #b9c9be; border-radius: 10px; background: white; color: var(--ink); cursor: pointer; }
+.my-seat button, .roster-actions button, .table-action { padding: 9px 13px; border: 1px solid #b9c9be; border-radius: 10px; background: white; color: var(--ink); cursor: pointer; }
 .my-seat .my-seat-list { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .my-seat .my-seat-chip { padding: 8px 9px 8px 12px; display: flex; grid-template-columns: auto auto; align-items: center; gap: 9px; border: 1px solid #b7dac6; border-radius: 11px; background: white; }
 .my-seat .my-seat-chip strong { font-size: 14px; }
@@ -136,7 +136,7 @@ input:disabled { color: #718078; background: #eef2ee; }
 .seat-button { width: 48px; height: 42px; position: relative; display: grid; place-items: center; border: 1px solid #aabbb0; border-radius: 8px 8px 12px 12px; color: var(--ink); background: #fff; cursor: pointer; transition: transform .16s ease, background .16s ease; }
 .seat-button:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--green-bright); box-shadow: 0 5px 12px rgba(23,75,50,.12); }
 .seat-button.selected { border-color: var(--orange); color: white; background: var(--orange); }
-.seat-button.occupied { border-color: #d4d9d5; color: #8e9992; background: #e5e8e6; cursor: not-allowed; }
+.seat-button.occupied { border-color: #d4d9d5; color: #6f7b74; background: #e5e8e6; cursor: pointer; }
 .seat-button.mine { border: 2px solid var(--green-bright); color: var(--green); background: var(--mint); cursor: pointer; }
 .seat-button small { position: absolute; bottom: 2px; font-size: 8px; font-weight: 800; }
 
@@ -160,6 +160,7 @@ input:disabled { color: #718078; background: #eef2ee; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 11px 12px; border-bottom: 1px solid #edf0ed; text-align: left; }
 th { color: #6b7b72; background: #f6f8f5; }
+.table-action { padding: 6px 10px; color: #8a4d37; font-size: 12px; }
 .empty { margin: 18px 0 4px; color: #75837b; text-align: center; }
 footer { padding: 28px 0 0; color: #6e7e75; font-size: 12px; text-align: center; }
 
