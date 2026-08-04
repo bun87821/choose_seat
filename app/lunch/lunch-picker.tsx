@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  allowsBabySeat,
+  babySeatTableIds,
   LUNCH_TOTAL_SEATS,
   lunchSeatKey,
   lunchSeatLabel,
   lunchZones,
+  tableById,
   zoneOfTable,
 } from "@/lib/lunch-tables";
 import { isValidPlate, normalizePlate } from "@/lib/plate";
@@ -244,21 +247,25 @@ export default function LunchPicker() {
 
   function downloadSeatCsv() {
     downloadCsv("0807午餐座位名單.csv", [
-      ["區域", "桌號", "位子", "姓名", "部門／備註", "選位時間"],
+      ["區域", "桌號", "位子", "姓名", "部門／備註", "可放嬰兒座椅", "選位時間"],
       ...reservations
         .slice()
         .sort(
           (a, b) =>
             a.tableId.localeCompare(b.tableId) || a.seatNumber - b.seatNumber,
         )
-        .map((item) => [
-          zoneOfTable.get(item.tableId) ?? "",
-          item.tableId,
-          String(item.seatNumber),
-          item.name,
-          item.note,
-          new Date(item.createdAt).toLocaleString("zh-TW"),
-        ]),
+        .map((item) => {
+          const table = tableById.get(item.tableId);
+          return [
+            zoneOfTable.get(item.tableId) ?? "",
+            item.tableId,
+            String(item.seatNumber),
+            item.name,
+            item.note,
+            table && allowsBabySeat(table) ? "可" : "",
+            new Date(item.createdAt).toLocaleString("zh-TW"),
+          ];
+        }),
     ]);
   }
 
@@ -404,6 +411,16 @@ export default function LunchPicker() {
 
           <p className="zone-hint">{activeZoneData.hint}</p>
 
+          <p className="baby-note">
+            <span aria-hidden="true">🍼</span>
+            <span>
+              <b>需要嬰兒座椅的請看這裡：</b>
+              所有<b>圓桌</b>都可以放嬰兒座椅，另外 R 區中間的{" "}
+              <b>R17、R27、R13、R23</b> 這四張方桌也放得下。桌號旁有 🍼
+              標記的即可安排，共 {babySeatTableIds.length} 桌。
+            </span>
+          </p>
+
           <div className="table-map" aria-busy={loading}>
             {activeZoneData.groups.map((group) => (
               <div className="table-group" key={group.id}>
@@ -423,7 +440,14 @@ export default function LunchPicker() {
                         key={item.id}
                       >
                         <header>
-                          <b>{item.id}</b>
+                          <b>
+                            {item.id}
+                            {allowsBabySeat(item) && (
+                              <i className="baby-badge" title="可放嬰兒座椅">
+                                🍼
+                              </i>
+                            )}
+                          </b>
                           <span>
                             {item.capacity - taken} / {item.capacity} 可選
                           </span>
@@ -635,9 +659,18 @@ export default function LunchPicker() {
                             a.tableId.localeCompare(b.tableId) ||
                             a.seatNumber - b.seatNumber,
                         )
-                        .map((item) => (
+                        .map((item) => {
+                          const table = tableById.get(item.tableId);
+                          return (
                           <tr key={item.seatKey}>
-                            <td>{item.tableId}</td>
+                            <td>
+                              {item.tableId}
+                              {table && allowsBabySeat(table) && (
+                                <i className="baby-badge" title="可放嬰兒座椅">
+                                  🍼
+                                </i>
+                              )}
+                            </td>
                             <td>{item.seatNumber} 號位</td>
                             <td>{item.name}</td>
                             <td>{item.note || "—"}</td>
@@ -651,7 +684,8 @@ export default function LunchPicker() {
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>

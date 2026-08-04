@@ -153,7 +153,12 @@ input:disabled { color: #718078; background: #eef2ee; }
 .plan-figure img { width: 100%; height: auto; border-radius: 10px; background: white; }
 .plan-figure figcaption { margin-top: 10px; color: #718078; font-size: 12px; text-align: center; }
 
-.zone-hint { margin: -14px 0 20px; color: #718078; font-size: 12px; font-weight: 700; text-align: center; }
+.zone-hint { margin: -14px 0 14px; color: #718078; font-size: 12px; font-weight: 700; text-align: center; }
+
+.baby-note { margin: 0 0 22px; padding: 13px 16px; display: flex; align-items: flex-start; gap: 11px; border: 1px solid #f2ddc4; border-radius: 14px; background: #fdf7ee; color: #7a5a33; font-size: 13px; line-height: 1.7; }
+.baby-note > span:first-child { font-size: 19px; line-height: 1.25; }
+.baby-note b { color: #6b4a25; }
+.baby-badge { margin-left: 5px; font-size: 13px; font-style: normal; vertical-align: 1px; }
 
 .table-map { display: grid; gap: 26px; padding-bottom: 6px; }
 .table-group h3 { margin: 0 0 12px; padding-left: 10px; border-left: 4px solid var(--green-bright); color: #47594f; font-size: 14px; }

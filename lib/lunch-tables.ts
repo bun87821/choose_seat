@@ -170,3 +170,15 @@ export const validLunchSeatKeys = new Set(
 export function lunchSeatLabel(tableId: string, seatNumber: number) {
   return `${tableId} 桌｜${seatNumber} 號位`;
 }
+
+/** R 區中間幾張方桌雖然不是圓桌，一樣放得下嬰兒座椅。 */
+const BABY_SEAT_RECT_TABLES = new Set(["R17", "R27", "R13", "R23"]);
+
+/** 圓桌都可以放嬰兒座椅，另外加上 R 區中間的 R17、R27、R13、R23。 */
+export function allowsBabySeat(item: LunchTable) {
+  return item.shape === "round" || BABY_SEAT_RECT_TABLES.has(item.id);
+}
+
+export const babySeatTableIds = lunchTables
+  .filter((item) => allowsBabySeat(item))
+  .map((item) => item.id);
