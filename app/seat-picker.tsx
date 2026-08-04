@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Reservation = {
@@ -197,6 +198,11 @@ export default function SeatPicker() {
       </header>
 
       <section className="content">
+        <nav className="page-nav">
+          <span className="current">🏟️ 棒球賽劃位</span>
+          <Link href="/lunch">🍽️ 午餐座位</Link>
+        </nav>
+
         <div className="status-strip">
           <div>
             <span className="live-dot" />

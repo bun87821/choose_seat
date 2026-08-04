@@ -3,6 +3,7 @@ import { Pool } from "pg";
 const globalForDb = globalThis as typeof globalThis & {
   railwaySeatPool?: Pool;
   railwaySeatSchemaPromise?: Promise<void>;
+  railwayLunchSchemaPromise?: Promise<void>;
 };
 
 if (!process.env.DATABASE_URL) {
@@ -48,4 +49,32 @@ export function ensureSchema() {
       });
   }
   return globalForDb.railwaySeatSchemaPromise;
+}
+
+export function ensureLunchSchema() {
+  if (!globalForDb.railwayLunchSchemaPromise) {
+    globalForDb.railwayLunchSchemaPromise = pool
+      .query(
+        `CREATE TABLE IF NOT EXISTS lunch_reservations (
+          seat_key TEXT PRIMARY KEY,
+          table_id TEXT NOT NULL,
+          seat_number INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS parking_plates (
+          plate TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );`,
+      )
+      .then(() => undefined)
+      .catch((error) => {
+        globalForDb.railwayLunchSchemaPromise = undefined;
+        throw error;
+      });
+  }
+  return globalForDb.railwayLunchSchemaPromise;
 }

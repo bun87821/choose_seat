@@ -1,8 +1,15 @@
-# 員工旅遊棒球座位劃位
+# 員工旅遊自助選位
 
-新莊棒球場 B1、B2 區共 71 席的自助劃位網站，介面類似電影選位。
+兩個獨立分頁，共用同一個網站與資料庫：
 
-## 功能
+| 路徑 | 用途 |
+| --- | --- |
+| `/` | 新莊棒球場 B1、B2 區共 71 席劃位 |
+| `/lunch` | 0807 午餐（饗 A JOY）194 位座位選位＋停車折抵車號登記 |
+
+兩頁最上方都有分頁切換列，可互相跳轉。
+
+## 棒球賽劃位（`/`）
 
 - B1：12–14 排 4–12 號；15 排 5–12 號；16 排 5–14 號，共 45 席
 - B2：14 排 7–12 號；15–16 排 5–14 號，共 26 席
@@ -12,6 +19,17 @@
 - 所有人皆可逐席取消座位後重新選位
 - 公開座位名單與 CSV 下載
 - PostgreSQL 永久保存資料
+
+## 午餐座位（`/lunch`）
+
+依 `0807午餐 鄭婉芃(台積電)194位座位圖` 建立，邏輯與棒球賽劃位相同。
+
+- R 區 25 桌共 108 位、B 區 20 桌共 86 位，合計 45 桌 194 位
+- 每桌顯示桌號與可安排人數（座位圖上的米字號數字），桌內位子逐一點選
+- 可展開餐廳平面圖（`public/lunch-floorplan.jpg`）對照桌號位置
+- 一樣可一次選多個位子、即時同步、任何人都能取消後重選
+- **停車折抵車號登記**：填姓名＋車號即可登記，名單公開並可下載 CSV 提供給餐廳折抵停車費；車號會自動轉成大寫、去除空白，同一車號不會重複登記
+- 桌位資料集中在 `lib/lunch-tables.ts`，前端與 API 共用同一份定義
 
 ## 本機執行
 
@@ -57,10 +75,20 @@ npm run start
 
 ```text
 app/
-  api/reservations/route.ts  # 劃位 API
-  seat-picker.tsx            # 選位介面
-  globals.css                # 樣式
+  api/reservations/route.ts        # 棒球賽劃位 API
+  api/lunch-reservations/route.ts  # 午餐選位 API
+  api/parking/route.ts             # 停車折抵車號 API
+  seat-picker.tsx                  # 棒球賽選位介面
+  lunch/page.tsx                   # 午餐分頁
+  lunch/lunch-picker.tsx           # 午餐選位與車號登記介面
+  globals.css                      # 樣式
 lib/
-  db.ts                      # PostgreSQL 連線與資料表初始化
-railway.json                 # Railway 建置與啟動設定
+  db.ts                            # PostgreSQL 連線與資料表初始化
+  lunch-tables.ts                  # 午餐桌號與每桌人數定義
+  plate.ts                         # 車號正規化與格式檢查
+public/
+  lunch-floorplan.jpg              # 午餐座位平面圖
+railway.json                       # Railway 建置與啟動設定
 ```
+
+資料表（第一次請求時自動建立）：`reservations`、`lunch_reservations`、`parking_plates`。
