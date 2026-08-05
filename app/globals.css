@@ -340,6 +340,27 @@ input:disabled { color: #718078; background: #eef2ee; }
 .pick-table { width: 100%; margin: 0 0 9px; padding: 5px; border: 1px solid #b6cedb; border-radius: 8px; color: #2f6f8f; background: #f1f7fb; font-size: 11px; font-weight: 800; cursor: pointer; }
 .pick-table:hover:not(:disabled) { color: white; background: #2f6f8f; }
 
+/* ---- 留言板 ---- */
+.board-card .step-number { background: #f3f6f4; font-size: 17px; }
+.board-count { color: #7b8a81; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.board-list { max-height: 420px; margin-top: 18px; padding: 4px; display: grid; gap: 9px; align-content: start; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; background: #fbfcfa; }
+.board-item { padding: 11px 13px; border-radius: 12px; background: white; box-shadow: 0 1px 3px rgba(26,63,46,.06); }
+.board-item-head { display: flex; align-items: baseline; gap: 9px; }
+.board-item-head b { font-size: 14px; }
+.board-item-head time { color: #9aa8a0; font-size: 11px; }
+.board-item-head button { margin-left: auto; padding: 2px 7px; border: 0; border-radius: 6px; background: transparent; color: #b9c4bd; font-size: 12px; cursor: pointer; }
+.board-item-head button:hover:not(:disabled) { background: #f6e2da; color: #8d3423; }
+.board-item p { margin: 6px 0 0; color: #33463c; font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.board-list .empty { margin: 26px 0; }
+
+.board-form { margin-top: 14px; display: grid; grid-template-columns: 190px 1fr auto; gap: 10px; align-items: start; }
+.board-form textarea { width: 100%; padding: 12px 13px; border: 1px solid #cfd9d1; border-radius: 11px; background: #fbfcfa; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.7; outline: none; resize: vertical; }
+.board-form textarea:focus { border-color: var(--green-bright); box-shadow: 0 0 0 3px rgba(28,125,84,.12); }
+.board-form button { min-width: 96px; height: 46px; padding: 0 20px; border: 0; border-radius: 11px; color: white; background: var(--green); font-weight: 800; cursor: pointer; }
+.board-form button:disabled { color: #a5aea8; background: #dfe3e0; cursor: not-allowed; }
+.board-foot { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #93a49a; font-size: 11px; }
+.board-foot .warn { color: #a8452e; font-weight: 800; }
+
 .roster { overflow: hidden; }
 .roster-toggle { width: 100%; padding: 20px 22px; display: flex; justify-content: space-between; align-items: center; border: 0; color: var(--ink); background: white; cursor: pointer; text-align: left; }
 .roster-toggle > span:first-child { display: grid; gap: 4px; }
@@ -396,6 +417,8 @@ footer { padding: 28px 0 0; color: #6e7e75; font-size: 12px; text-align: center;
   .move-control select { width: 100%; max-width: none; }
   .roster-buttons { flex-wrap: wrap; }
   .my-seat { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .board-form { grid-template-columns: 1fr; }
+  .board-form button { width: 100%; }
   .parking-form { grid-template-columns: 1fr; }
   .parking-form button { width: 100%; }
   .map-hint .scroll-hint { display: block; }

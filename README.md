@@ -43,6 +43,7 @@
 - **參加人數**：選位前先選參加人數（含本人），攜眷就選 2 以上。選的位子數必須與參加人數一致才能送出，眷屬座位會自動標成「王小明 眷1」
 - 一樣可一次選多個位子、即時同步、任何人都能取消後重選
 - **停車折抵車號登記**：填姓名＋車號即可登記，名單公開並可下載 CSV 提供給餐廳折抵停車費。車號存檔時一律轉大寫並去掉連字號與空白，所以 `ABC-1234`、`abc 1234`、`ABC1234` 會被視為同一台車擋下重複登記；顯示與 CSV 則自動補回連字號
+- **留言板**：頁面最下方的公開聊天區，填暱稱＋內容即可留言（單則上限 300 字，`Ctrl`／`⌘ + Enter` 送出）。每 5 秒自動更新，最多顯示最近 200 則，任何人都可以刪除任一則。暱稱留空會沿用上方填的姓名
 - 桌位資料集中在 `lib/lunch-tables.ts`，前端與 API 共用同一份定義
 
 ## 本機執行
@@ -111,7 +112,7 @@ npm run start
 ## 重要說明
 
 - 原本 ChatGPT Sites 網站的劃位資料不會自動移轉到 Railway。
-- 網站會公開姓名、座位與備註，請只把連結提供給預期的使用者。
+- 網站會公開姓名、座位、備註與留言，請只把連結提供給預期的使用者。留言板沒有身分驗證，任何人都能發言與刪除。
 - 座位不綁定瀏覽器；所有使用者都可以取消任一座位後重新選位。
 
 ## 專案結構
@@ -121,6 +122,7 @@ app/
   api/reservations/route.ts        # 棒球賽劃位 API
   api/lunch-reservations/route.ts  # 午餐選位 API
   api/parking/route.ts             # 停車折抵車號 API
+  api/messages/route.ts            # 留言板 API
   seat-picker.tsx                  # 棒球賽選位介面
   lunch/page.tsx                   # 午餐分頁
   lunch/lunch-picker.tsx           # 午餐選位與車號登記介面
@@ -136,4 +138,4 @@ public/
 railway.json                       # Railway 建置與啟動設定
 ```
 
-資料表（第一次請求時自動建立）：`reservations`、`lunch_reservations`、`parking_plates`。
+資料表（第一次請求時自動建立）：`reservations`、`lunch_reservations`、`parking_plates`、`lunch_messages`。

@@ -35,6 +35,13 @@ type SelectedSeat = {
   seatNumber: number;
 };
 
+type BoardMessage = {
+  id: string;
+  name: string;
+  body: string;
+  createdAt: string;
+};
+
 type PlateEntry = {
   plate: string;
   name: string;
@@ -81,6 +88,12 @@ export default function LunchPicker() {
   /** 從搜尋結果點過去的那個位子，會多一圈強調。 */
   const [foundKey, setFoundKey] = useState<string | null>(null);
 
+  const [messages, setMessages] = useState<BoardMessage[]>([]);
+  const [boardName, setBoardName] = useState("");
+  const [boardBody, setBoardBody] = useState("");
+  const [boardSaving, setBoardSaving] = useState(false);
+  const [boardMessage, setBoardMessage] = useState("");
+
   const [plateName, setPlateName] = useState("");
   const [plateNumber, setPlateNumber] = useState("");
   const [plateNote, setPlateNote] = useState("");
@@ -89,17 +102,23 @@ export default function LunchPicker() {
 
   const loadAll = useCallback(async (quiet = false) => {
     try {
-      const [seatResponse, plateResponse] = await Promise.all([
+      const [seatResponse, plateResponse, boardResponse] = await Promise.all([
         fetch("/api/lunch-reservations", { cache: "no-store" }),
         fetch("/api/parking", { cache: "no-store" }),
+        fetch("/api/messages", { cache: "no-store" }),
       ]);
-      if (!seatResponse.ok || !plateResponse.ok) throw new Error("載入失敗");
+      if (!seatResponse.ok || !plateResponse.ok || !boardResponse.ok)
+        throw new Error("載入失敗");
       const seatData = (await seatResponse.json()) as {
         reservations: LunchReservation[];
       };
       const plateData = (await plateResponse.json()) as { plates: PlateEntry[] };
+      const boardData = (await boardResponse.json()) as {
+        messages: BoardMessage[];
+      };
       setReservations(seatData.reservations);
       setPlates(plateData.plates);
+      setMessages(boardData.messages);
       // 別人先取消掉的位子就不必留在待取消清單裡。
       const liveKeys = new Set(
         seatData.reservations.map((item) => item.seatKey),
@@ -589,6 +608,55 @@ export default function LunchPicker() {
       setPlateMessage("刪除失敗，請稍後再試。");
     } finally {
       setPlateSaving(false);
+    }
+  }
+
+  async function postMessage() {
+    const who = boardName.trim() || name.trim();
+    const text = boardBody.trim();
+    if (!who) {
+      setBoardMessage("請先填暱稱。");
+      return;
+    }
+    if (!text) {
+      setBoardMessage("請先寫點什麼再送出。");
+      return;
+    }
+    setBoardSaving(true);
+    setBoardMessage("");
+    try {
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: who, body: text }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "留言失敗");
+      setBoardBody("");
+      setBoardName(who);
+      await loadAll(true);
+    } catch (error) {
+      setBoardMessage(error instanceof Error ? error.message : "留言失敗，請再試一次。");
+    } finally {
+      setBoardSaving(false);
+    }
+  }
+
+  async function removeMessage(item: BoardMessage) {
+    if (!window.confirm(`確定刪除 ${item.name} 的留言嗎？`)) return;
+    setBoardSaving(true);
+    try {
+      const response = await fetch("/api/messages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id }),
+      });
+      if (!response.ok) throw new Error("刪除失敗");
+      await loadAll(true);
+    } catch {
+      setBoardMessage("刪除失敗，請稍後再試。");
+    } finally {
+      setBoardSaving(false);
     }
   }
 
@@ -1532,8 +1600,83 @@ export default function LunchPicker() {
           )}
         </section>
 
+        <section className="picker-card board-card">
+          <div className="picker-heading">
+            <div>
+              <span className="step-number">💬</span>
+              <div>
+                <h2>留言板</h2>
+                <p>找人併桌、揪團、問問題都可以，大家都看得到</p>
+              </div>
+            </div>
+            <span className="board-count">{messages.length} 則留言</span>
+          </div>
+
+          <div className="board-list">
+            {messages.length ? (
+              messages.map((item) => (
+                <div className="board-item" key={item.id}>
+                  <div className="board-item-head">
+                    <b>{item.name}</b>
+                    <time dateTime={item.createdAt}>
+                      {new Date(item.createdAt).toLocaleString("zh-TW", {
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </time>
+                    <button
+                      onClick={() => removeMessage(item)}
+                      disabled={boardSaving}
+                      title="刪除這則留言"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p>{item.body}</p>
+                </div>
+              ))
+            ) : (
+              <p className="empty">還沒有人留言，來說第一句吧！</p>
+            )}
+          </div>
+
+          <div className="board-form">
+            <input
+              value={boardName}
+              onChange={(event) => setBoardName(event.target.value)}
+              placeholder={name.trim() ? `留空則用「${name.trim()}」` : "你的暱稱"}
+              maxLength={30}
+              aria-label="暱稱"
+            />
+            <textarea
+              value={boardBody}
+              onChange={(event) => setBoardBody(event.target.value)}
+              onKeyDown={(event) => {
+                // Ctrl/⌘ + Enter 直接送出，跟一般聊天室一樣。
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void postMessage();
+                }
+              }}
+              placeholder="想說什麼？（Ctrl / ⌘ + Enter 送出）"
+              maxLength={300}
+              rows={2}
+              aria-label="留言內容"
+            />
+            <button onClick={postMessage} disabled={boardSaving}>
+              {boardSaving ? "送出中…" : "送出"}
+            </button>
+          </div>
+          <div className="board-foot">
+            <small>{boardBody.length} / 300</small>
+            {boardMessage && <small className="warn">{boardMessage}</small>}
+          </div>
+        </section>
+
         <footer>
-          <p>座位與車號名單皆為公開資訊，請只把連結提供給預期的使用者。</p>
+          <p>座位、車號與留言皆為公開資訊，請只把連結提供給預期的使用者。</p>
         </footer>
       </section>
     </main>
