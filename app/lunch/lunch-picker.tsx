@@ -75,6 +75,9 @@ export default function LunchPicker() {
   const [message, setMessage] = useState("");
   const [showList, setShowList] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
+  const [query, setQuery] = useState("");
+  /** 從搜尋結果點過去的那個位子，會多一圈強調。 */
+  const [foundKey, setFoundKey] = useState<string | null>(null);
 
   const [plateName, setPlateName] = useState("");
   const [plateNumber, setPlateNumber] = useState("");
@@ -140,6 +143,40 @@ export default function LunchPicker() {
   }, []);
 
   const availableCount = LUNCH_TOTAL_SEATS - reservations.length;
+
+  /** 用姓名或課別找人；空白就不搜尋。 */
+  const searchResults = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    return reservations
+      .filter(
+        (item) =>
+          item.name.toLowerCase().includes(needle) ||
+          item.note.toLowerCase().includes(needle),
+      )
+      .sort(
+        (a, b) =>
+          a.tableId.localeCompare(b.tableId) || a.seatNumber - b.seatNumber,
+      );
+  }, [query, reservations]);
+
+  const matchedKeys = useMemo(
+    () => new Set(searchResults.map((item) => item.seatKey)),
+    [searchResults],
+  );
+
+  /** 跳到某個人的位子：切到他所在的區，捲過去並標記起來。 */
+  function goToSeat(reservation: LunchReservation) {
+    const zone = zoneOfTable.get(reservation.tableId);
+    if (zone) setActiveZone(zone);
+    if (viewMode === "map") setOpenTableId(reservation.tableId);
+    setFoundKey(reservation.seatKey);
+    window.setTimeout(() => {
+      document
+        .querySelector(`[data-seat="${reservation.seatKey}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+  }
 
   /** 能容納目前選取人數的桌子，換桌下拉選單用。 */
   const moveOptions = useMemo(() => {
@@ -627,7 +664,8 @@ export default function LunchPicker() {
             return (
               <button
                 key={seatKey}
-                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""} ${marked && !swapMode ? "to-cancel" : ""} ${holding ? "holding" : ""} ${droppable ? "droppable" : ""}`}
+                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""} ${marked && !swapMode ? "to-cancel" : ""} ${holding ? "holding" : ""} ${droppable ? "droppable" : ""} ${matchedKeys.has(seatKey) ? "match" : ""} ${foundKey === seatKey ? "found" : ""}`}
+                data-seat={seatKey}
                 disabled={saving}
                 onClick={() =>
                   swapMode
@@ -792,6 +830,62 @@ export default function LunchPicker() {
             </figure>
           )}
 
+          <div className="seat-search">
+            <div className="seat-search-box">
+              <span aria-hidden="true">🔍</span>
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setFoundKey(null);
+                }}
+                placeholder="輸入姓名或課別，找出坐在哪裡"
+                maxLength={30}
+                aria-label="搜尋姓名或課別"
+              />
+              {query && (
+                <button
+                  onClick={() => {
+                    setQuery("");
+                    setFoundKey(null);
+                  }}
+                >
+                  清除
+                </button>
+              )}
+            </div>
+            {query.trim() &&
+              (searchResults.length ? (
+                <div className="seat-search-results">
+                  <b>找到 {searchResults.length} 位</b>
+                  <div>
+                    {searchResults.slice(0, 30).map((item) => (
+                      <button
+                        key={item.seatKey}
+                        className={foundKey === item.seatKey ? "active" : ""}
+                        onClick={() => goToSeat(item)}
+                      >
+                        <span>{item.name}</span>
+                        <small>
+                          {lunchSeatLabel(item.tableId, item.seatNumber)}
+                          {item.note ? `・${item.note}` : ""}
+                        </small>
+                      </button>
+                    ))}
+                  </div>
+                  {searchResults.length > 30 && (
+                    <small className="more">
+                      還有 {searchResults.length - 30} 位，請再輸入更完整的關鍵字
+                    </small>
+                  )}
+                </div>
+              ) : (
+                <p className="seat-search-empty">
+                  找不到「{query.trim()}」，可能還沒有選位。
+                </p>
+              ))}
+          </div>
+
           <div className="mode-row">
             <div className="view-tabs">
               <button
@@ -922,7 +1016,9 @@ export default function LunchPicker() {
                           <span className="floor-dots">
                             {seatNumbersOf(item).map((seatNumber) => {
                               const seatKey = lunchSeatKey(item.id, seatNumber);
-                              const state = cancelKeys.includes(seatKey)
+                              const state = matchedKeys.has(seatKey)
+                                ? "matched"
+                                : cancelKeys.includes(seatKey)
                                 ? "cancelling"
                                 : reservationMap.has(seatKey)
                                   ? "taken"

@@ -164,6 +164,27 @@ input:disabled { color: #718078; background: #eef2ee; }
 .baby-note b { color: #6b4a25; }
 .baby-badge { margin-left: 5px; font-size: 13px; font-style: normal; vertical-align: 1px; }
 
+.seat-search { margin-top: 20px; }
+.seat-search-box { display: flex; align-items: center; gap: 10px; padding: 0 14px; border: 1px solid #cfd9d1; border-radius: 13px; background: #fbfcfa; }
+.seat-search-box:focus-within { border-color: var(--green-bright); box-shadow: 0 0 0 3px rgba(28,125,84,.12); }
+.seat-search-box > span { font-size: 15px; }
+.seat-search-box input { height: 46px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.seat-search-box input:focus { border: 0; box-shadow: none; }
+.seat-search-box > button { flex: none; padding: 6px 12px; border: 1px solid #cfd9d1; border-radius: 8px; background: white; color: #62736a; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.seat-search-results { margin-top: 12px; padding: 13px 15px; border: 1px solid #f0e2c4; border-radius: 13px; background: #fffbf1; }
+.seat-search-results > b { display: block; margin-bottom: 9px; color: #8a6d2f; font-size: 12px; }
+.seat-search-results > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.seat-search-results button { padding: 7px 12px; display: grid; gap: 2px; border: 1px solid #ecd9ae; border-radius: 10px; background: white; color: var(--ink); text-align: left; cursor: pointer; }
+.seat-search-results button:hover { border-color: #d9a83a; }
+.seat-search-results button.active { border-color: #d9a83a; background: #fdf3dc; }
+.seat-search-results button span { font-size: 14px; font-weight: 700; }
+.seat-search-results button small { color: #8a7c5c; font-size: 11px; }
+.seat-search-results .more { display: block; margin-top: 9px; color: #8a7c5c; font-size: 11px; }
+.seat-search-empty { margin: 12px 0 0; padding: 12px 15px; border-radius: 12px; background: #f6f8f5; color: #75837b; font-size: 13px; }
+.seat-button.match { box-shadow: 0 0 0 3px rgba(217,168,58,.55); }
+.seat-button.found { border-color: #d9a83a; box-shadow: 0 0 0 4px rgba(217,168,58,.85); }
+.floor-table .floor-dots i.matched { background: #d9a83a; }
+
 .mode-row { margin: 22px 0 20px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; }
 .mode-row .view-tabs { margin: 0; }
 .swap-toggle { padding: 11px 18px; border: 1px solid #b6cedb; border-radius: 999px; color: #2f6f8f; background: #f1f7fb; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap; }
