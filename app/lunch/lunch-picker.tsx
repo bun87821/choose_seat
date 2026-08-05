@@ -531,6 +531,7 @@ export default function LunchPicker() {
         <nav className="page-nav">
           <Link href="/">🏟️ 棒球賽劃位</Link>
           <span className="current">🍽️ 午餐座位</span>
+          <Link href="/lunch/import">📋 批次匯入</Link>
         </nav>
 
         <div className="status-strip">

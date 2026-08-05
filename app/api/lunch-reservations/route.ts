@@ -58,20 +58,39 @@ export async function POST(request: Request) {
     await ensureLunchSchema();
     const payload = (await request.json()) as {
       seats?: Array<{ tableId?: string; seatNumber?: number }>;
+      /** 批次匯入時每個位子各自帶姓名與課別。 */
+      entries?: Array<{
+        tableId?: string;
+        seatNumber?: number;
+        name?: string;
+        note?: string;
+      }>;
       name?: string;
       note?: string;
     };
-    const seats = payload.seats ?? [];
-    const name = payload.name?.trim() ?? "";
-    const note = payload.note?.trim() ?? "";
+    const sharedName = payload.name?.trim() ?? "";
+    const sharedNote = payload.note?.trim() ?? "";
+    const entries = payload.entries?.length
+      ? payload.entries.map((entry) => ({
+          tableId: String(entry.tableId),
+          seatNumber: Number(entry.seatNumber),
+          name: entry.name?.trim() ?? "",
+          note: entry.note?.trim() ?? "",
+        }))
+      : (payload.seats ?? []).map((seat) => ({
+          tableId: String(seat.tableId),
+          seatNumber: Number(seat.seatNumber),
+          name: sharedName,
+          note: sharedNote,
+        }));
 
-    const seatKeys = seats.map((seat) =>
-      lunchSeatKey(String(seat.tableId), Number(seat.seatNumber)),
+    const seatKeys = entries.map((entry) =>
+      lunchSeatKey(entry.tableId, entry.seatNumber),
     );
 
     if (
-      !seats.length ||
-      seats.length > LUNCH_TOTAL_SEATS ||
+      !entries.length ||
+      entries.length > LUNCH_TOTAL_SEATS ||
       new Set(seatKeys).size !== seatKeys.length ||
       seatKeys.some((seatKey) => !validLunchSeatKeys.has(seatKey))
     ) {
@@ -81,7 +100,12 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!name || name.length > 30 || note.length > 40) {
+    if (
+      entries.some(
+        (entry) =>
+          !entry.name || entry.name.length > 30 || entry.note.length > 40,
+      )
+    ) {
       return Response.json(
         { error: "請確認姓名與備註內容。" },
         { status: 400 },
@@ -89,22 +113,22 @@ export async function POST(request: Request) {
     }
 
     await client.query("BEGIN");
-    for (const [index, seat] of seats.entries()) {
+    for (const [index, entry] of entries.entries()) {
       await client.query(
         `INSERT INTO lunch_reservations
           (seat_key, table_id, seat_number, name, note)
          VALUES ($1, $2, $3, $4, $5)`,
         [
           seatKeys[index],
-          String(seat.tableId),
-          Number(seat.seatNumber),
-          name,
-          note,
+          entry.tableId,
+          entry.seatNumber,
+          entry.name,
+          entry.note,
         ],
       );
     }
     await client.query("COMMIT");
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, added: entries.length });
   } catch (error) {
     await client.query("ROLLBACK");
     const code =
