@@ -5,21 +5,29 @@ import {
   type LunchTable,
 } from "./lunch-tables";
 
-export type Person = {
+/** 一位同仁與他的眷屬算一組，排位時盡量不拆開。 */
+export type Party = {
   name: string;
   dept: string;
+  /** 參加人數，含本人。 */
+  size: number;
 };
 
 export type Assignment = {
   tableId: string;
   seatNumber: number;
+  /** 顯示在座位上的名字，眷屬會標成「王小明 眷1」。 */
   name: string;
   dept: string;
+  partyName: string;
+  isGuest: boolean;
 };
 
 export type AssignResult = {
   assignments: Assignment[];
-  unplaced: Person[];
+  unplaced: Party[];
+  /** 因為沒有夠大的桌子而被拆開的組別。 */
+  splitParties: string[];
 };
 
 export type AssignOptions = {
@@ -44,9 +52,15 @@ type OpenTable = {
   seats: number[];
 };
 
-/** 把名單解析成人員清單。每行「姓名<Tab 或逗號>課別」，多餘的欄位會被忽略。 */
+export const MAX_PARTY_SIZE = 10;
+
+/**
+ * 把名單解析成組別。每行「姓名<Tab 或逗號>課別<Tab 或逗號>參加人數」，
+ * 人數省略或不是數字時當作 1 人。
+ */
 export function parseRoster(input: string): {
-  people: Person[];
+  parties: Party[];
+  headcount: number;
   skipped: number;
 } {
   const lines = input
@@ -54,7 +68,7 @@ export function parseRoster(input: string): {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const people: Person[] = [];
+  const parties: Party[] = [];
   let skipped = 0;
 
   for (const [index, line] of lines.entries()) {
@@ -70,15 +84,29 @@ export function parseRoster(input: string): {
     if (index === 0 && /姓名|名字|name/i.test(cells[0]) && cells.length > 1) {
       continue;
     }
-    const [name, dept = ""] = cells;
+    const [name, dept = "", rawSize = ""] = cells;
+    const parsedSize = Number.parseInt(rawSize.replace(/[^\d]/g, ""), 10);
+    const size =
+      Number.isFinite(parsedSize) && parsedSize >= 1
+        ? Math.min(parsedSize, MAX_PARTY_SIZE)
+        : 1;
     if (name.length > 30 || dept.length > 40) {
       skipped += 1;
       continue;
     }
-    people.push({ name, dept });
+    parties.push({ name, dept, size });
   }
 
-  return { people, skipped };
+  return {
+    parties,
+    headcount: parties.reduce((total, party) => total + party.size, 0),
+    skipped,
+  };
+}
+
+/** 眷屬的顯示名稱。 */
+export function guestName(name: string, index: number) {
+  return index === 0 ? name : `${name} 眷${index}`;
 }
 
 /** 目前還沒被劃走的位子，依桌號整理成「桌 → 空位號碼」。 */
@@ -93,6 +121,15 @@ export function openSeatsByTable(takenSeatKeys: Iterable<string>) {
     if (seats.length) open.set(item.id, seats);
   }
   return open;
+}
+
+/** 依座位圖順序排好，合併兩批排位結果時用。 */
+export function sortAssignments(assignments: Assignment[]) {
+  return [...assignments].sort(
+    (a, b) =>
+      (tableOrder.get(a.tableId) ?? 0) - (tableOrder.get(b.tableId) ?? 0) ||
+      a.seatNumber - b.seatNumber,
+  );
 }
 
 /**
@@ -116,9 +153,7 @@ function findBlock(open: OpenTable[], need: number) {
       if (total < need) continue;
       const waste = total - need;
       const better =
-        !best ||
-        span < best.span ||
-        (span === best.span && waste < best.waste);
+        !best || span < best.span || (span === best.span && waste < best.waste);
       if (better) best = { start, end, span, waste };
       break;
     }
@@ -127,17 +162,8 @@ function findBlock(open: OpenTable[], need: number) {
   return best;
 }
 
-/** 依座位圖順序排好，合併兩批排位結果時用。 */
-export function sortAssignments(assignments: Assignment[]) {
-  return [...assignments].sort(
-    (a, b) =>
-      (tableOrder.get(a.tableId) ?? 0) - (tableOrder.get(b.tableId) ?? 0) ||
-      a.seatNumber - b.seatNumber,
-  );
-}
-
 export function assignSeats(
-  people: Person[],
+  parties: Party[],
   openSeats: Map<string, number[]>,
   options: AssignOptions,
 ): AssignResult {
@@ -153,71 +179,103 @@ export function assignSeats(
     );
 
   const assignments: Assignment[] = [];
-  const unplaced: Person[] = [];
+  const unplaced: Party[] = [];
+  const splitParties: string[] = [];
 
-  const take = (entry: OpenTable, person: Person) => {
-    const seatNumber = entry.seats.shift()!;
-    assignments.push({
-      tableId: entry.table.id,
-      seatNumber,
-      name: person.name,
-      dept: person.dept,
-    });
-  };
+  /** 把一整組安排到同一桌的連續空位上。 */
+  function seatParty(entry: OpenTable, party: Party, offset = 0) {
+    for (let index = 0; index < party.size; index += 1) {
+      const seatNumber = entry.seats.shift()!;
+      assignments.push({
+        tableId: entry.table.id,
+        seatNumber,
+        name: guestName(party.name, offset + index),
+        dept: party.dept,
+        partyName: party.name,
+        isGuest: offset + index > 0,
+      });
+    }
+  }
+
+  /** 在指定範圍的桌子裡，優先塞得下的整組先坐，不拆散任何一組。 */
+  function fillWholeParties(
+    entries: OpenTable[],
+    remaining: Party[],
+  ): Party[] {
+    for (const entry of entries) {
+      let placed = true;
+      while (placed && entry.seats.length && remaining.length) {
+        placed = false;
+        const index = remaining.findIndex(
+          (party) => party.size <= entry.seats.length,
+        );
+        if (index >= 0) {
+          seatParty(entry, remaining[index]);
+          remaining.splice(index, 1);
+          placed = true;
+        }
+      }
+      if (!remaining.length) break;
+    }
+    return remaining;
+  }
+
+  /** 最後手段：真的沒有桌子容得下整組時才拆開。 */
+  function forceSeat(remaining: Party[]) {
+    for (const party of remaining) {
+      let seated = 0;
+      let split = false;
+      while (seated < party.size) {
+        const entry = open.find((item) => item.seats.length);
+        if (!entry) break;
+        const count = Math.min(entry.seats.length, party.size - seated);
+        seatParty(entry, { ...party, size: count }, seated);
+        if (seated > 0 || count < party.size) split = true;
+        seated += count;
+      }
+      if (split && party.size > 1) splitParties.push(party.name);
+      if (seated < party.size) {
+        unplaced.push({ ...party, size: party.size - seated });
+      }
+    }
+  }
 
   if (!options.keepDeptTogether) {
-    let cursor = 0;
-    for (const person of people) {
-      while (cursor < open.length && !open[cursor].seats.length) cursor += 1;
-      if (cursor >= open.length) {
-        unplaced.push(person);
-        continue;
-      }
-      take(open[cursor], person);
-    }
-    return { assignments, unplaced };
+    const leftover = fillWholeParties(open, [...parties]);
+    forceSeat(leftover);
+    return { assignments: sortAssignments(assignments), unplaced, splitParties };
   }
 
   // 依課別分組，保留名單中第一次出現的順序當作預設排序。
-  const groups = new Map<string, Person[]>();
-  for (const person of people) {
-    const key = person.dept || "（未填課別）";
+  const groups = new Map<string, Party[]>();
+  for (const party of parties) {
+    const key = party.dept || "（未填課別）";
     const list = groups.get(key);
-    if (list) list.push(person);
-    else groups.set(key, [person]);
+    if (list) list.push(party);
+    else groups.set(key, [party]);
   }
 
   const ordered = [...groups.entries()];
+  const headcountOf = (list: Party[]) =>
+    list.reduce((total, party) => total + party.size, 0);
   if (options.bigDeptsFirst) {
-    ordered.sort((a, b) => b[1].length - a[1].length);
+    ordered.sort((a, b) => headcountOf(b[1]) - headcountOf(a[1]));
   }
 
+  const leftovers: Party[] = [];
   for (const [, members] of ordered) {
-    const remaining = [...members];
-    const block = findBlock(open, remaining.length);
-
-    if (block) {
-      for (let index = block.start; index <= block.end && remaining.length; index += 1) {
-        const entry = open[index];
-        const count = Math.min(entry.seats.length, remaining.length);
-        for (let seat = 0; seat < count; seat += 1) take(entry, remaining.shift()!);
-      }
-      continue;
-    }
-
-    // 剩下的空位已經湊不出一整段，能塞多少算多少。
-    for (const entry of open) {
-      while (entry.seats.length && remaining.length) take(entry, remaining.shift()!);
-      if (!remaining.length) break;
-    }
-    unplaced.push(...remaining);
+    // 大組先挑桌，比較不會卡在剩下的零星空位。
+    const remaining = [...members].sort((a, b) => b.size - a.size);
+    const block = findBlock(open, headcountOf(remaining));
+    const entries = block
+      ? open.slice(block.start, block.end + 1)
+      : [...open];
+    leftovers.push(...fillWholeParties(entries, remaining));
   }
 
-  assignments.sort(
-    (a, b) =>
-      (tableOrder.get(a.tableId) ?? 0) - (tableOrder.get(b.tableId) ?? 0) ||
-      a.seatNumber - b.seatNumber,
-  );
+  // 課別區塊填不下的，再看全場還有沒有整組坐得下的地方。
+  const stillLeft = fillWholeParties(open, leftovers);
+  forceSeat(stillLeft);
 
-  return { assignments, unplaced };
+  return { assignments: sortAssignments(assignments), unplaced, splitParties };
 }

@@ -14,7 +14,7 @@ import {
   parseRoster,
   sortAssignments,
   type Assignment,
-  type Person,
+  type Party,
 } from "@/lib/seat-assign";
 
 type LunchReservation = {
@@ -25,10 +25,10 @@ type LunchReservation = {
   note: string;
 };
 
-const SAMPLE = `姓名\t課別
-王小明\tISDD-01
-陳美玲\tISDD-01
-林大同\tISDD-02`;
+const SAMPLE = `姓名\t課別\t參加人數
+王小明\tISDD-01\t1
+陳美玲\tISDD-01\t3
+林大同\tISDD-02\t2`;
 
 export default function ImportPanel() {
   const [reservations, setReservations] = useState<LunchReservation[]>([]);
@@ -36,7 +36,8 @@ export default function ImportPanel() {
   const [keepDeptTogether, setKeepDeptTogether] = useState(true);
   const [bigDeptsFirst, setBigDeptsFirst] = useState(true);
   const [preview, setPreview] = useState<Assignment[] | null>(null);
-  const [unplaced, setUnplaced] = useState<Person[]>([]);
+  const [unplaced, setUnplaced] = useState<Party[]>([]);
+  const [splitParties, setSplitParties] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -77,31 +78,35 @@ export default function ImportPanel() {
 
   const deptSummary = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const person of parsed.people) {
-      const key = person.dept || "（未填課別）";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+    for (const party of parsed.parties) {
+      const key = party.dept || "（未填課別）";
+      counts.set(key, (counts.get(key) ?? 0) + party.size);
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [parsed.people]);
+  }, [parsed.parties]);
+
+  const guestCount = parsed.headcount - parsed.parties.length;
 
   const freeCount = LUNCH_TOTAL_SEATS - reservations.length;
 
   function buildPreview() {
-    if (!parsed.people.length) {
+    if (!parsed.parties.length) {
       setMessage("還沒有讀到任何名單，請先貼上資料。");
       setPreview(null);
       return;
     }
     const open = openSeatsByTable(reservations.map((item) => item.seatKey));
-    const result = assignSeats(parsed.people, open, {
+    const result = assignSeats(parsed.parties, open, {
       keepDeptTogether,
       bigDeptsFirst,
     });
     setPreview(result.assignments);
     setUnplaced(result.unplaced);
+    setSplitParties(result.splitParties);
+    const short = result.unplaced.reduce((total, party) => total + party.size, 0);
     setMessage(
-      result.unplaced.length
-        ? `已排 ${result.assignments.length} 位，還有 ${result.unplaced.length} 位排不下（空位只剩 ${freeCount} 個）。`
+      short
+        ? `已排 ${result.assignments.length} 位，還有 ${short} 位排不下（空位只剩 ${freeCount} 個）。`
         : `已排好 ${result.assignments.length} 位，確認後再寫入。`,
     );
   }
@@ -117,7 +122,7 @@ export default function ImportPanel() {
     );
     const displaced = current
       .filter((item) => taken.has(lunchSeatKey(item.tableId, item.seatNumber)))
-      .map((item) => ({ name: item.name, dept: item.dept }));
+      .map((item) => ({ name: item.name, dept: item.dept, size: 1 }));
     if (!displaced.length) return null;
 
     const used = new Set([
@@ -191,6 +196,7 @@ export default function ImportPanel() {
       setMessage(`已寫入 ${preview.length} 位。可以回選位頁看結果。`);
       setPreview(null);
       setUnplaced([]);
+      setSplitParties([]);
       setRaw("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "寫入失敗，請再試一次。");
@@ -251,8 +257,9 @@ export default function ImportPanel() {
               <div>
                 <h2>貼上名單</h2>
                 <p>
-                  每行一位，格式為「姓名　課別」。可以直接從 Excel
-                  複製兩欄貼過來，也接受逗號分隔；有標題列會自動略過。
+                  每行一位同仁，格式為「姓名　課別　參加人數」。人數含本人，
+                  <b>攜眷就填 2 以上</b>，省略當作 1 人。可以直接從 Excel
+                  複製三欄貼過來，也接受逗號分隔；有標題列會自動略過。
                 </p>
               </div>
             </div>
@@ -269,8 +276,9 @@ export default function ImportPanel() {
 
           <div className="parse-summary">
             <span>
-              讀到 <b>{parsed.people.length}</b> 位
-              {parsed.skipped > 0 && `（略過 ${parsed.skipped} 行）`}
+              讀到 <b>{parsed.parties.length}</b> 位同仁、共 <b>{parsed.headcount}</b> 人
+              {guestCount > 0 && `（含眷屬 ${guestCount} 位）`}
+              {parsed.skipped > 0 && `　略過 ${parsed.skipped} 行`}
             </span>
             {deptSummary.length > 0 && (
               <span className="dept-chips">
@@ -329,12 +337,12 @@ export default function ImportPanel() {
             <div>
               <span>目前有 {freeCount} 個空位可以配</span>
               <strong>
-                {parsed.people.length
-                  ? `名單 ${parsed.people.length} 位・${deptSummary.length} 個課別`
+                {parsed.parties.length
+                  ? `名單 ${parsed.parties.length} 位同仁・共 ${parsed.headcount} 人・${deptSummary.length} 個課別`
                   : "先在上面貼上名單"}
               </strong>
             </div>
-            <button onClick={buildPreview} disabled={!parsed.people.length}>
+            <button onClick={buildPreview} disabled={!parsed.parties.length}>
               產生預覽
             </button>
           </div>
@@ -364,12 +372,31 @@ export default function ImportPanel() {
               <p className="baby-note">
                 <span aria-hidden="true">⚠️</span>
                 <span>
-                  有 <b>{unplaced.length}</b> 位排不進去（空位不足）：
+                  有{" "}
+                  <b>
+                    {unplaced.reduce((total, party) => total + party.size, 0)}
+                  </b>{" "}
+                  位排不進去（空位不足）：
                   {unplaced
                     .slice(0, 20)
-                    .map((person) => person.name)
+                    .map((party) =>
+                      party.size > 1 ? `${party.name}（${party.size} 位）` : party.name,
+                    )
                     .join("、")}
                   {unplaced.length > 20 && " …"}
+                </span>
+              </p>
+            )}
+
+            {splitParties.length > 0 && (
+              <p className="baby-note">
+                <span aria-hidden="true">👨‍👩‍👧</span>
+                <span>
+                  有 <b>{splitParties.length}</b>{" "}
+                  組人數超過單桌容量或剩餘空位不足，同行的人被分到不同桌：
+                  {splitParties.slice(0, 20).join("、")}
+                  {splitParties.length > 20 && " …"}
+                  。可以在下面預覽確認，或寫入後再自行換桌。
                 </span>
               </p>
             )}

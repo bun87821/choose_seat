@@ -18,6 +18,7 @@ import {
   type LunchTable,
 } from "@/lib/lunch-tables";
 import { formatPlate, isValidPlate, normalizePlate } from "@/lib/plate";
+import { guestName, MAX_PARTY_SIZE } from "@/lib/seat-assign";
 
 type LunchReservation = {
   seatKey: string;
@@ -62,6 +63,7 @@ export default function LunchPicker() {
   const [moveTarget, setMoveTarget] = useState("");
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
+  const [partySize, setPartySize] = useState(1);
   const [activeZone, setActiveZone] = useState<"R" | "B">("R");
   const [viewMode, setViewMode] = useState<"map" | "list">("list");
   const [openTableId, setOpenTableId] = useState<string | null>(null);
@@ -186,8 +188,16 @@ export default function LunchPicker() {
       setMessage("請先填寫姓名並至少選擇一個位子。");
       return;
     }
+    if (selectedSeats.length !== partySize) {
+      setMessage(
+        `你填的參加人數是 ${partySize} 位，但選了 ${selectedSeats.length} 個位子。請調整成一致再送出。`,
+      );
+      return;
+    }
     const confirmed = window.confirm(
-      `請確認選擇位子數與用餐人數相符。\n\n本次選擇 ${selectedSeats.length} 個位子，是否確認？`,
+      partySize > 1
+        ? `${name.trim()} 共 ${partySize} 位（含眷屬 ${partySize - 1} 位），選了 ${selectedSeats.length} 個位子，是否確認？`
+        : `本次選擇 ${selectedSeats.length} 個位子，是否確認？`,
     );
     if (!confirmed) return;
 
@@ -198,12 +208,12 @@ export default function LunchPicker() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          seats: selectedSeats.map((seat) => ({
+          entries: selectedSeats.map((seat, index) => ({
             tableId: seat.tableId,
             seatNumber: seat.seatNumber,
+            name: guestName(name.trim(), index),
+            note: note.trim(),
           })),
-          name: name.trim(),
-          note: note.trim(),
         }),
       });
       const data = (await response.json()) as { error?: string };
@@ -561,6 +571,22 @@ export default function LunchPicker() {
             />
           </label>
           <label>
+            <span>參加人數 *</span>
+            <select
+              className="party-size"
+              value={partySize}
+              onChange={(event) => setPartySize(Number(event.target.value))}
+            >
+              {Array.from({ length: MAX_PARTY_SIZE }, (_, index) => index + 1).map(
+                (size) => (
+                  <option key={size} value={size}>
+                    {size} 位{size > 1 ? `（含眷屬 ${size - 1} 位）` : "（僅本人）"}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <label>
             <span>部門／備註</span>
             <input
               value={note}
@@ -793,9 +819,11 @@ export default function LunchPicker() {
           <div className="confirm-bar">
             <div>
               <span>
-                {selectedSeats.length
-                  ? `本次新增 ${selectedSeats.length} 個位子`
-                  : "請至少選擇一個空位"}
+                參加人數 {partySize} 位・已選 {selectedSeats.length} 個位子
+                {selectedSeats.length !== partySize &&
+                  (selectedSeats.length < partySize
+                    ? `（還要選 ${partySize - selectedSeats.length} 個）`
+                    : `（多選了 ${selectedSeats.length - partySize} 個）`)}
               </span>
               <strong>
                 {selectedSeats.length
@@ -807,9 +835,11 @@ export default function LunchPicker() {
             </div>
             <button
               onClick={reserveSeats}
-              disabled={!selectedSeats.length || !name.trim() || saving}
+              disabled={
+                selectedSeats.length !== partySize || !name.trim() || saving
+              }
             >
-              {saving ? "處理中…" : `確認選擇 ${selectedSeats.length || ""} 位`}
+              {saving ? "處理中…" : `確認選擇 ${partySize} 位`}
             </button>
           </div>
 

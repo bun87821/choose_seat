@@ -99,7 +99,9 @@ h1 span { color: #ffd36a; }
   background: white;
 }
 
-.identity-card { padding: 22px 24px; display: grid; grid-template-columns: auto 1fr 1.2fr 1.2fr; gap: 18px; align-items: end; }
+.identity-card { padding: 22px 24px; display: grid; grid-template-columns: auto 1fr 1.1fr 1.1fr 1.1fr; gap: 18px; align-items: end; }
+.party-size { width: 100%; height: 44px; padding: 0 11px; border: 1px solid #cfd9d1; border-radius: 11px; background: #fbfcfa; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.party-size:focus { border-color: var(--green-bright); box-shadow: 0 0 0 3px rgba(28,125,84,.12); outline: none; }
 .step-number { width: 36px; height: 36px; display: inline-grid; place-items: center; border-radius: 50%; color: white; background: var(--green); font-weight: 800; }
 .identity-copy h2, .picker-heading h2 { margin: 0; font-size: 20px; }
 .identity-copy p, .picker-heading p { margin: 6px 0 0; color: #718078; font-size: 13px; }
