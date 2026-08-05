@@ -59,6 +59,7 @@ export default function LunchPicker() {
   const [plates, setPlates] = useState<PlateEntry[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<SelectedSeat[]>([]);
   const [cancelKeys, setCancelKeys] = useState<string[]>([]);
+  const [moveTarget, setMoveTarget] = useState("");
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [activeZone, setActiveZone] = useState<"R" | "B">("R");
@@ -134,6 +135,43 @@ export default function LunchPicker() {
   }, []);
 
   const availableCount = LUNCH_TOTAL_SEATS - reservations.length;
+
+  /** 能容納目前選取人數的桌子，換桌下拉選單用。 */
+  const moveOptions = useMemo(() => {
+    if (!cancelKeys.length) return [];
+    const markedByTable = new Map<string, number>();
+    for (const key of cancelKeys) {
+      const reservation = reservationMap.get(key);
+      if (reservation) {
+        markedByTable.set(
+          reservation.tableId,
+          (markedByTable.get(reservation.tableId) ?? 0) + 1,
+        );
+      }
+    }
+    const occupiedByTable = new Map<string, number>();
+    for (const reservation of reservations) {
+      occupiedByTable.set(
+        reservation.tableId,
+        (occupiedByTable.get(reservation.tableId) ?? 0) + 1,
+      );
+    }
+    return lunchTables
+      .map((item) => ({
+        item,
+        // 選取中的位子搬走之後，這桌實際會空出幾個位子。
+        freeAfter:
+          item.capacity -
+          ((occupiedByTable.get(item.id) ?? 0) - (markedByTable.get(item.id) ?? 0)),
+      }))
+      .filter(
+        ({ item, freeAfter }) =>
+          freeAfter >= cancelKeys.length &&
+          (markedByTable.get(item.id) ?? 0) < cancelKeys.length,
+      );
+  }, [cancelKeys, reservationMap, reservations]);
+
+  const moveTargetValid = moveOptions.some(({ item }) => item.id === moveTarget);
 
   function toggleSeat(seat: SelectedSeat) {
     setSelectedSeats((current) =>
@@ -221,6 +259,47 @@ export default function LunchPicker() {
       setCancelKeys([]);
     } catch {
       setMessage("取消失敗，請稍後再試。");
+      await loadAll(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function moveSelected() {
+    const targets = cancelKeys
+      .map((key) => reservationMap.get(key))
+      .filter((item): item is LunchReservation => Boolean(item));
+    const destination = tableById.get(moveTarget);
+    if (!targets.length || !destination) return;
+
+    const who = Array.from(new Set(targets.map((item) => item.name))).join("、");
+    const from = Array.from(new Set(targets.map((item) => item.tableId))).join(
+      "、",
+    );
+    const confirmed = window.confirm(
+      `要把 ${from} 桌的 ${targets.length} 位（${who}）整批換到 ${destination.id} 桌嗎？`,
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/lunch-reservations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seatKeys: targets.map((item) => item.seatKey),
+          targetTableId: destination.id,
+        }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "換桌失敗");
+      await loadAll(true);
+      setMessage(`已把 ${targets.length} 位換到 ${destination.id} 桌。`);
+      setCancelKeys([]);
+      setMoveTarget("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "換桌失敗，請再試一次。");
       await loadAll(true);
     } finally {
       setSaving(false);
@@ -340,6 +419,19 @@ export default function LunchPicker() {
     ).length;
   }
 
+  /** 一次選起某桌所有已劃走的位子；已經全選時再按一次就取消選取。 */
+  function markWholeTable(item: LunchTable) {
+    const keys = seatNumbersOf(item)
+      .map((seatNumber) => lunchSeatKey(item.id, seatNumber))
+      .filter((seatKey) => reservationMap.has(seatKey));
+    const allMarked = keys.every((seatKey) => cancelKeys.includes(seatKey));
+    setCancelKeys((current) =>
+      allMarked
+        ? current.filter((seatKey) => !keys.includes(seatKey))
+        : Array.from(new Set([...current, ...keys])),
+    );
+  }
+
   function renderTableCard(item: LunchTable) {
     const taken = takenCountOf(item);
     return (
@@ -361,6 +453,16 @@ export default function LunchPicker() {
           </span>
         </header>
         {item.hint && <p className="table-hint">{item.hint}</p>}
+        {taken > 0 && (
+          <button
+            className="pick-table"
+            onClick={() => markWholeTable(item)}
+            disabled={saving}
+            title={`把 ${item.id} 桌目前 ${taken} 位一起選起來，可整批換桌或取消`}
+          >
+            選整桌（{taken} 位）
+          </button>
+        )}
         <div className="table-seats">
           {seatNumbersOf(item).map((seatNumber) => {
             const seatKey = lunchSeatKey(item.id, seatNumber);
@@ -475,7 +577,7 @@ export default function LunchPicker() {
               <div>
                 <h2>選擇你的桌次與位子</h2>
                 <p>
-                  可同時選擇多個空位；點已有人的位子會標記為待取消，能一次取消多個
+                  可同時選擇多個空位；點已有人的位子可以把人選起來，一次整批換桌或取消
                 </p>
               </div>
             </div>
@@ -494,7 +596,7 @@ export default function LunchPicker() {
               </span>
               <span>
                 <i className="seat to-cancel" />
-                待取消
+                已選取
               </span>
             </div>
           </div>
@@ -713,7 +815,7 @@ export default function LunchPicker() {
           {cancelKeys.length > 0 && (
             <div className="confirm-bar cancel-bar">
               <div>
-                <span>已標記 {cancelKeys.length} 個位子要取消</span>
+                <span>已選取 {cancelKeys.length} 個已劃位子</span>
                 <strong>
                   {cancelKeys
                     .map((key) => reservationMap.get(key))
@@ -731,8 +833,35 @@ export default function LunchPicker() {
                   onClick={() => setCancelKeys([])}
                   disabled={saving}
                 >
-                  清除標記
+                  清除選取
                 </button>
+                <div className="move-control">
+                  <select
+                    value={moveTargetValid ? moveTarget : ""}
+                    onChange={(event) => setMoveTarget(event.target.value)}
+                    disabled={saving || !moveOptions.length}
+                    aria-label="換到哪一桌"
+                  >
+                    <option value="">
+                      {moveOptions.length
+                        ? "換到哪一桌…"
+                        : `沒有桌子能一次容納 ${cancelKeys.length} 位`}
+                    </option>
+                    {moveOptions.map(({ item, freeAfter }) => (
+                      <option key={item.id} value={item.id}>
+                        {item.id}（空 {freeAfter} / {item.capacity} 位）
+                        {allowsBabySeat(item) ? " 🍼" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="move"
+                    onClick={moveSelected}
+                    disabled={saving || !moveTargetValid}
+                  >
+                    {saving ? "處理中…" : "整批換桌"}
+                  </button>
+                </div>
                 <button onClick={cancelSelected} disabled={saving}>
                   {saving ? "處理中…" : `取消這 ${cancelKeys.length} 個位子`}
                 </button>
@@ -857,12 +986,41 @@ export default function LunchPicker() {
             <div className="roster-content">
               <div className="roster-actions">
                 <p>
-                  名單每 5 秒自動更新。勾選左邊的方框可以一次取消多個位子，
+                  名單每 5 秒自動更新。勾選左邊的方框可以一次換桌或取消多個位子，
                   {cancelKeys.length > 0 && (
                     <b>目前已勾選 {cancelKeys.length} 個。</b>
                   )}
                 </p>
                 <div className="roster-buttons">
+                  {cancelKeys.length > 0 && (
+                    <div className="move-control">
+                      <select
+                        value={moveTargetValid ? moveTarget : ""}
+                        onChange={(event) => setMoveTarget(event.target.value)}
+                        disabled={saving || !moveOptions.length}
+                        aria-label="換到哪一桌"
+                      >
+                        <option value="">
+                          {moveOptions.length
+                            ? "換到哪一桌…"
+                            : `沒有桌子能一次容納 ${cancelKeys.length} 位`}
+                        </option>
+                        {moveOptions.map(({ item, freeAfter }) => (
+                          <option key={item.id} value={item.id}>
+                            {item.id}（空 {freeAfter} / {item.capacity} 位）
+                            {allowsBabySeat(item) ? " 🍼" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="move"
+                        onClick={moveSelected}
+                        disabled={saving || !moveTargetValid}
+                      >
+                        整批換桌
+                      </button>
+                    </div>
+                  )}
                   <button
                     className="danger"
                     onClick={cancelSelected}

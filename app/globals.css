@@ -127,7 +127,7 @@ input:disabled { color: #718078; background: #eef2ee; }
 .seat { width: 16px; height: 14px; display: inline-block; border: 1px solid #aebcb2; border-radius: 4px 4px 6px 6px; background: white; }
 .seat.selected { border-color: var(--orange); background: var(--orange); }
 .seat.occupied { border-color: #cbd2cd; background: #dfe3e0; }
-.seat.to-cancel { border-color: #c9563f; background: #f6d9d2; }
+.seat.to-cancel { border-color: #2f6f8f; background: #cfe4ef; }
 
 .field { width: min(680px, 88%); height: 58px; margin: 34px auto 24px; display: grid; place-items: center; color: #5c846e; border-bottom: 5px solid #9fcab2; border-radius: 0 0 50% 50%; background: linear-gradient(#eff9f3, #d9eee2); font-size: 12px; font-weight: 800; letter-spacing: .3em; }
 .section-tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 26px; }
@@ -145,8 +145,7 @@ input:disabled { color: #718078; background: #eef2ee; }
 .seat-button.selected { border-color: var(--orange); color: white; background: var(--orange); }
 .seat-button.occupied { border-color: #d4d9d5; color: #6f7b74; background: #e5e8e6; cursor: pointer; }
 .seat-button.mine { border: 2px solid var(--green-bright); color: var(--green); background: var(--mint); cursor: pointer; }
-.seat-button.to-cancel { border: 2px solid #c9563f; color: #8d3423; background: #f8e2dc; }
-.seat-button.to-cancel span { text-decoration: line-through; }
+.seat-button.to-cancel { border: 2px solid #2f6f8f; color: #1d4d66; background: #dcecf5; }
 .seat-button small { width: 100%; overflow: hidden; color: inherit; font-size: 9px; font-weight: 800; line-height: 1.1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- 午餐座位（桌次選位） ---- */
@@ -230,14 +229,24 @@ input:disabled { color: #718078; background: #eef2ee; }
 .confirm-bar button:disabled { color: #a5aea8; background: #dfe3e0; box-shadow: none; cursor: not-allowed; }
 .message { margin: 15px 0 0; color: #7b4c35; font-size: 13px; font-weight: 700; text-align: center; }
 
-.cancel-bar { border: 1px solid #eebfb3; background: #fdf1ee; }
-.cancel-bar span { color: #a3503a; }
-.cancel-bar strong { color: #7d3a28; font-size: 13px; }
-.cancel-bar-actions { display: flex; align-items: center; gap: 10px; }
-.cancel-bar button { min-width: 150px; padding: 13px 20px; border: 0; border-radius: 11px; color: white; background: #c9563f; font-weight: 800; cursor: pointer; box-shadow: 0 7px 16px rgba(201,86,63,.22); }
-.cancel-bar button.ghost { min-width: 0; padding: 12px 16px; border: 1px solid #ddc0b7; color: #8d5a4a; background: white; box-shadow: none; }
+.cancel-bar { flex-direction: column; align-items: stretch; gap: 13px; border: 1px solid #bfd8e5; background: #f1f7fb; }
+.cancel-bar span { color: #3d6d85; }
+.cancel-bar strong { color: #24536b; font-size: 13px; }
+/* .confirm-bar div 會把裡面的 div 變成 grid，這裡要用同等特異性蓋回來。 */
+.cancel-bar .cancel-bar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.cancel-bar .move-control { display: flex; align-items: center; gap: 8px; }
+.cancel-bar button { min-width: 0; padding: 13px 20px; border: 0; border-radius: 11px; color: white; background: #c9563f; font-weight: 800; white-space: nowrap; cursor: pointer; box-shadow: 0 7px 16px rgba(201,86,63,.22); }
+.cancel-bar button.ghost { padding: 12px 16px; border: 1px solid #c3d6e0; color: #4a7186; background: white; box-shadow: none; }
 .cancel-bar button:disabled { color: #a5aea8; background: #dfe3e0; box-shadow: none; cursor: not-allowed; }
-.floor-table .floor-dots i.cancelling { background: #c9563f; }
+.floor-table .floor-dots i.cancelling { background: #2f6f8f; }
+
+.move-control { display: flex; align-items: center; gap: 8px; }
+.move-control select { height: 46px; max-width: 230px; padding: 0 12px; border: 1px solid #b6cedb; border-radius: 11px; color: var(--ink); background: white; font: inherit; font-size: 13px; cursor: pointer; }
+.move-control select:disabled { color: #96a3a9; background: #eef2f4; cursor: not-allowed; }
+.cancel-bar button.move, .roster-buttons button.move { min-width: 120px; border: 0; color: white; background: #2f6f8f; box-shadow: 0 7px 16px rgba(47,111,143,.22); }
+.cancel-bar button.move:disabled, .roster-buttons button.move:disabled { color: #a5aea8; background: #dfe3e0; box-shadow: none; }
+.pick-table { width: 100%; margin: 0 0 9px; padding: 5px; border: 1px solid #b6cedb; border-radius: 8px; color: #2f6f8f; background: #f1f7fb; font-size: 11px; font-weight: 800; cursor: pointer; }
+.pick-table:hover:not(:disabled) { color: white; background: #2f6f8f; }
 
 .roster { overflow: hidden; }
 .roster-toggle { width: 100%; padding: 20px 22px; display: flex; justify-content: space-between; align-items: center; border: 0; color: var(--ink); background: white; cursor: pointer; text-align: left; }
@@ -252,13 +261,15 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 11px 12px; border-bottom: 1px solid #edf0ed; text-align: left; }
 th { color: #6b7b72; background: #f6f8f5; }
 .table-action { padding: 6px 10px; color: #8a4d37; font-size: 12px; }
-.roster-buttons { display: flex; gap: 10px; }
+.roster-actions { flex-wrap: wrap; }
+.roster-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.roster-buttons button { white-space: nowrap; }
 .roster-buttons button.danger { border-color: #c9563f; color: white; background: #c9563f; font-weight: 800; }
 .roster-buttons button.danger:disabled { border-color: #dfe3e0; color: #a5aea8; background: #eef1ee; cursor: not-allowed; }
 th.check-cell, td.check-cell { width: 40px; padding-right: 0; }
-.check-cell input { width: 17px; height: 17px; accent-color: #c9563f; cursor: pointer; }
-tbody tr.marked { background: #fdf1ee; }
-tbody tr.marked td { color: #8d3423; }
+.check-cell input { width: 17px; height: 17px; accent-color: #2f6f8f; cursor: pointer; }
+tbody tr.marked { background: #f1f7fb; }
+tbody tr.marked td { color: #24536b; }
 .empty { margin: 18px 0 4px; color: #75837b; text-align: center; }
 footer { padding: 28px 0 0; color: #6e7e75; font-size: 12px; text-align: center; }
 
@@ -275,8 +286,14 @@ footer { padding: 28px 0 0; color: #6e7e75; font-size: 12px; text-align: center;
   .seat-map { margin: 0 -3px; }
   .confirm-bar { align-items: stretch; flex-direction: column; }
   .confirm-bar button { width: 100%; }
-  .cancel-bar-actions { flex-direction: column-reverse; }
-  .cancel-bar-actions button { width: 100%; }
+  .cancel-bar .cancel-bar-actions { flex-direction: column; align-items: stretch; }
+  .cancel-bar .cancel-bar-actions button { width: 100%; }
+  .cancel-bar .cancel-bar-actions .move-control { order: 1; }
+  .cancel-bar .cancel-bar-actions > button:not(.ghost) { order: 2; }
+  .cancel-bar .cancel-bar-actions > button.ghost { order: 3; }
+  .cancel-bar .move-control, .move-control { flex-direction: column; align-items: stretch; }
+  .move-control select { width: 100%; max-width: none; }
+  .roster-buttons { flex-wrap: wrap; }
   .my-seat { align-items: flex-start; flex-direction: column; gap: 14px; }
   .parking-form { grid-template-columns: 1fr; }
   .parking-form button { width: 100%; }
