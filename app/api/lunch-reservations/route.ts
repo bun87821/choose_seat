@@ -168,6 +168,100 @@ export async function POST(request: Request) {
   }
 }
 
+/** 座位鍵是「桌號-座號」，桌號本身不含連字號。 */
+function splitSeatKey(seatKey: string) {
+  const index = seatKey.lastIndexOf("-");
+  return {
+    tableId: seatKey.slice(0, index),
+    seatNumber: Number(seatKey.slice(index + 1)),
+  };
+}
+
+/**
+ * 兩個位子對調：目標有人就互換，沒人就直接搬過去。
+ * 給座位圖上「點一個人再點另一個位子」用。
+ */
+export async function PUT(request: Request) {
+  const client = await pool.connect();
+  try {
+    await ensureLunchSchema();
+    const payload = (await request.json()) as { from?: string; to?: string };
+    const from = payload.from?.trim() ?? "";
+    const to = payload.to?.trim() ?? "";
+
+    if (
+      !validLunchSeatKeys.has(from) ||
+      !validLunchSeatKeys.has(to) ||
+      from === to
+    ) {
+      return Response.json({ error: "請確認要交換的兩個位子。" }, { status: 400 });
+    }
+
+    await client.query("BEGIN");
+    const rows = await client.query<{
+      seat_key: string;
+      name: string;
+      note: string;
+      created_at: Date;
+    }>(
+      `SELECT seat_key, name, note, created_at
+       FROM lunch_reservations
+       WHERE seat_key = ANY($1::text[])
+       FOR UPDATE`,
+      [[from, to]],
+    );
+    const fromRow = rows.rows.find((row) => row.seat_key === from);
+    if (!fromRow) {
+      await client.query("ROLLBACK");
+      return Response.json(
+        { error: "這個位子剛剛被取消了，請重新整理後再試。" },
+        { status: 409 },
+      );
+    }
+    const toRow = rows.rows.find((row) => row.seat_key === to);
+
+    await client.query(
+      "DELETE FROM lunch_reservations WHERE seat_key = ANY($1::text[])",
+      [[from, to]],
+    );
+
+    const place = async (
+      seatKey: string,
+      row: { name: string; note: string; created_at: Date },
+    ) => {
+      const { tableId, seatNumber } = splitSeatKey(seatKey);
+      await client.query(
+        `INSERT INTO lunch_reservations
+          (seat_key, table_id, seat_number, name, note, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [seatKey, tableId, seatNumber, row.name, row.note, row.created_at],
+      );
+    };
+
+    await place(to, fromRow);
+    if (toRow) await place(from, toRow);
+
+    await client.query("COMMIT");
+    return Response.json({ ok: true, swapped: Boolean(toRow) });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "";
+    if (code === "23505") {
+      return Response.json(
+        { error: "位子剛被別人選走了，請重新整理後再試。" },
+        { status: 409 },
+      );
+    }
+    console.error("PUT /api/lunch-reservations failed", error);
+    return Response.json({ error: "換位失敗，請稍後再試。" }, { status: 500 });
+  } finally {
+    client.release();
+  }
+}
+
 /** 把一批已經劃走的位子整批搬到另一張桌子，姓名與備註跟著走。 */
 export async function PATCH(request: Request) {
   const client = await pool.connect();

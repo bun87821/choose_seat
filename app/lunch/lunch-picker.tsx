@@ -61,6 +61,9 @@ export default function LunchPicker() {
   const [selectedSeats, setSelectedSeats] = useState<SelectedSeat[]>([]);
   const [cancelKeys, setCancelKeys] = useState<string[]>([]);
   const [moveTarget, setMoveTarget] = useState("");
+  const [swapMode, setSwapMode] = useState(false);
+  /** 換位模式下「拿起來」的位子。 */
+  const [swapFrom, setSwapFrom] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [partySize, setPartySize] = useState(1);
@@ -275,6 +278,63 @@ export default function LunchPicker() {
     }
   }
 
+  /** 換位模式：第一次點是拿起來，第二次點是換過去或互換。 */
+  async function tapForSwap(seatKey: string) {
+    setMessage("");
+    if (!swapFrom) {
+      if (reservationMap.has(seatKey)) setSwapFrom(seatKey);
+      else setMessage("請先點一個已經有人的位子，再點要換到哪裡。");
+      return;
+    }
+    if (swapFrom === seatKey) {
+      setSwapFrom(null);
+      return;
+    }
+
+    const source = reservationMap.get(swapFrom);
+    if (!source) {
+      setSwapFrom(null);
+      setMessage("剛剛選的位子已經被取消了，請重新選一次。");
+      return;
+    }
+    const target = reservationMap.get(seatKey);
+    const fromLabel = lunchSeatLabel(source.tableId, source.seatNumber);
+    const toLabel = lunchSeatLabel(
+      seatKey.slice(0, seatKey.lastIndexOf("-")),
+      Number(seatKey.slice(seatKey.lastIndexOf("-") + 1)),
+    );
+    const confirmed = window.confirm(
+      target
+        ? `要把 ${source.name}（${fromLabel}）和 ${target.name}（${toLabel}）互換嗎？`
+        : `要把 ${source.name} 從 ${fromLabel} 換到 ${toLabel} 嗎？`,
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/lunch-reservations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: swapFrom, to: seatKey }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "換位失敗");
+      await loadAll(true);
+      setMessage(
+        target
+          ? `已將 ${source.name} 與 ${target.name} 互換。`
+          : `已把 ${source.name} 換到 ${toLabel}。`,
+      );
+      setSwapFrom(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "換位失敗，請再試一次。");
+      await loadAll(true);
+      setSwapFrom(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function moveSelected() {
     const targets = cancelKeys
       .map((key) => reservationMap.get(key))
@@ -463,7 +523,7 @@ export default function LunchPicker() {
           </span>
         </header>
         {item.hint && <p className="table-hint">{item.hint}</p>}
-        {taken > 0 && (
+        {taken > 0 && !swapMode && (
           <button
             className="pick-table"
             onClick={() => markWholeTable(item)}
@@ -482,22 +542,30 @@ export default function LunchPicker() {
             );
             const label = lunchSeatLabel(item.id, seatNumber);
             const marked = cancelKeys.includes(seatKey);
+            const holding = swapFrom === seatKey;
+            const droppable = swapMode && Boolean(swapFrom) && !holding;
             return (
               <button
                 key={seatKey}
-                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""} ${marked ? "to-cancel" : ""}`}
+                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""} ${marked && !swapMode ? "to-cancel" : ""} ${holding ? "holding" : ""} ${droppable ? "droppable" : ""}`}
                 disabled={saving}
                 onClick={() =>
-                  reservation
-                    ? toggleCancel(seatKey)
-                    : toggleSeat({ seatKey, tableId: item.id, seatNumber })
+                  swapMode
+                    ? void tapForSwap(seatKey)
+                    : reservation
+                      ? toggleCancel(seatKey)
+                      : toggleSeat({ seatKey, tableId: item.id, seatNumber })
                 }
-                aria-pressed={reservation ? marked : selected}
-                aria-label={`${label}${reservation ? `，${reservation.name} 已選，點擊標記取消` : "，可選"}`}
+                aria-pressed={swapMode ? holding : reservation ? marked : selected}
+                aria-label={`${label}${reservation ? `，${reservation.name}` : "，空位"}`}
                 title={
-                  reservation
-                    ? `${reservation.name}・${label}・點擊標記取消`
-                    : label
+                  swapMode
+                    ? reservation
+                      ? `${reservation.name}・${label}・點擊${swapFrom ? "與這位互換" : "拿起來"}`
+                      : `${label}・${swapFrom ? "點擊換到這裡" : "空位"}`
+                    : reservation
+                      ? `${reservation.name}・${label}・點擊標記取消`
+                      : label
                 }
               >
                 <span>{seatNumber}</span>
@@ -644,20 +712,48 @@ export default function LunchPicker() {
             </figure>
           )}
 
-          <div className="view-tabs">
+          <div className="mode-row">
+            <div className="view-tabs">
+              <button
+                className={viewMode === "list" ? "active" : ""}
+                onClick={() => setViewMode("list")}
+              >
+                座位卡片
+              </button>
+              <button
+                className={viewMode === "map" ? "active" : ""}
+                onClick={() => setViewMode("map")}
+              >
+                平面圖總覽
+              </button>
+            </div>
             <button
-              className={viewMode === "list" ? "active" : ""}
-              onClick={() => setViewMode("list")}
+              className={`swap-toggle ${swapMode ? "active" : ""}`}
+              onClick={() => {
+                setSwapMode((value) => !value);
+                setSwapFrom(null);
+                setCancelKeys([]);
+                setMessage("");
+              }}
             >
-              座位卡片
-            </button>
-            <button
-              className={viewMode === "map" ? "active" : ""}
-              onClick={() => setViewMode("map")}
-            >
-              平面圖總覽
+              {swapMode ? "✓ 換位模式（點一換一）" : "換位模式（點一換一）"}
             </button>
           </div>
+
+          {swapMode && (
+            <p className="swap-hint" role="status">
+              {swapFrom ? (
+                <>
+                  已拿起{" "}
+                  <b>{reservationMap.get(swapFrom)?.name ?? "—"}</b>
+                  ，請點要換到的位子：點空位是搬過去，點別人是兩人互換。
+                  <button onClick={() => setSwapFrom(null)}>取消</button>
+                </>
+              ) : (
+                <>點一個已經有人的位子把他拿起來，再點另一個位子即可換位。</>
+              )}
+            </p>
+          )}
 
           {viewMode === "list" && (
             <>
@@ -843,7 +939,7 @@ export default function LunchPicker() {
             </button>
           </div>
 
-          {cancelKeys.length > 0 && (
+          {cancelKeys.length > 0 && !swapMode && (
             <div className="confirm-bar cancel-bar">
               <div>
                 <span>已選取 {cancelKeys.length} 個已劃位子</span>
