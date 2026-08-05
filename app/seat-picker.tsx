@@ -62,6 +62,9 @@ export default function SeatPicker() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [showList, setShowList] = useState(false);
+  const [swapMode, setSwapMode] = useState(false);
+  /** 換位模式下「拿起來」的座位。 */
+  const [swapFrom, setSwapFrom] = useState<string | null>(null);
 
   const loadReservations = useCallback(async (quiet = false) => {
     try {
@@ -148,6 +151,60 @@ export default function SeatPicker() {
       setMessage(`已取消 ${seatLabel(reservation)}。`);
     } catch {
       setMessage("取消失敗，請稍後再試。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** 換位模式：第一次點是拿起來，第二次點是換過去或互換。 */
+  async function tapForSwap(seatKey: string, seat: Seat) {
+    setMessage("");
+    if (!swapFrom) {
+      if (reservationMap.has(seatKey)) setSwapFrom(seatKey);
+      else setMessage("請先點一個已經有人的座位，再點要換到哪裡。");
+      return;
+    }
+    if (swapFrom === seatKey) {
+      setSwapFrom(null);
+      return;
+    }
+
+    const source = reservationMap.get(swapFrom);
+    if (!source) {
+      setSwapFrom(null);
+      setMessage("剛剛選的座位已經被取消了，請重新選一次。");
+      return;
+    }
+    const target = reservationMap.get(seatKey);
+    const fromLabel = seatLabel(source);
+    const toLabel = seatLabel(seat);
+    const confirmed = window.confirm(
+      target
+        ? `要把 ${source.name}（${fromLabel}）和 ${target.name}（${toLabel}）互換嗎？`
+        : `要把 ${source.name} 從 ${fromLabel} 換到 ${toLabel} 嗎？`,
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/reservations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: swapFrom, to: seatKey }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "換位失敗");
+      await loadReservations(true);
+      setMessage(
+        target
+          ? `已將 ${source.name} 與 ${target.name} 互換。`
+          : `已把 ${source.name} 換到 ${toLabel}。`,
+      );
+      setSwapFrom(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "換位失敗，請再試一次。");
+      await loadReservations(true);
+      setSwapFrom(null);
     } finally {
       setSaving(false);
     }
@@ -246,7 +303,7 @@ export default function SeatPicker() {
               <span className="step-number">2</span>
               <div>
                 <h2>選擇你的座位</h2>
-                <p>可同時選擇多個空位；已有人座位點擊後可取消</p>
+                <p>可同時選擇多個空位；已有人座位點擊後可取消，或開啟換位模式互換</p>
               </div>
             </div>
             <div className="legend">
@@ -255,6 +312,33 @@ export default function SeatPicker() {
               <span><i className="seat occupied" />已有人</span>
             </div>
           </div>
+
+          <div className="mode-row">
+            <button
+              className={`swap-toggle ${swapMode ? "active" : ""}`}
+              onClick={() => {
+                setSwapMode((value) => !value);
+                setSwapFrom(null);
+                setMessage("");
+              }}
+            >
+              {swapMode ? "✓ 換位模式（點一換一）" : "換位模式（點一換一）"}
+            </button>
+          </div>
+
+          {swapMode && (
+            <p className="swap-hint" role="status">
+              {swapFrom ? (
+                <>
+                  已拿起 <b>{reservationMap.get(swapFrom)?.name ?? "—"}</b>
+                  ，請點要換到的座位：點空位是搬過去，點別人是兩人互換。
+                  <button onClick={() => setSwapFrom(null)}>取消</button>
+                </>
+              ) : (
+                <>點一個已經有人的座位把他拿起來，再點另一個座位即可換位。</>
+              )}
+            </p>
+          )}
 
           <div className="field"><span>球　場　方　向</span></div>
 
@@ -287,13 +371,25 @@ export default function SeatPicker() {
                       return (
                         <button
                           key={seat.key}
-                          className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""}`}
+                          className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""} ${swapFrom === seat.key ? "holding" : ""} ${swapMode && swapFrom && swapFrom !== seat.key ? "droppable" : ""}`}
                           disabled={saving}
                           onClick={() =>
-                            reservation ? void cancelReservation(reservation) : toggleSeat(seat)
+                            swapMode
+                              ? void tapForSwap(seat.key, seat)
+                              : reservation
+                                ? void cancelReservation(reservation)
+                                : toggleSeat(seat)
                           }
-                          aria-label={`${seatLabel(seat)}${reservation ? `，${reservation.name} 已選，點擊取消` : "，可選"}`}
-                          title={reservation ? `${reservation.name}・${seatLabel(seat)}` : seatLabel(seat)}
+                          aria-label={`${seatLabel(seat)}${reservation ? `，${reservation.name}` : "，可選"}`}
+                          title={
+                            swapMode
+                              ? reservation
+                                ? `${reservation.name}・${seatLabel(seat)}・點擊${swapFrom ? "與這位互換" : "拿起來"}`
+                                : `${seatLabel(seat)}・${swapFrom ? "點擊換到這裡" : "空位"}`
+                              : reservation
+                                ? `${reservation.name}・${seatLabel(seat)}`
+                                : seatLabel(seat)
+                          }
                         >
                           <span>{seat.number}</span>
                           {reservation && <small>{reservation.name}</small>}

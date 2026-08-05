@@ -153,6 +153,108 @@ export async function POST(request: Request) {
   }
 }
 
+/** 座位鍵是「區-排-號」。 */
+function splitSeatKey(seatKey: string) {
+  const [section, row, number] = seatKey.split("-");
+  return { section, row: Number(row), number: Number(number) };
+}
+
+/**
+ * 兩個位子對調：目標有人就互換，沒人就直接搬過去。
+ * 給座位圖上「點一個人再點另一個位子」用。
+ */
+export async function PUT(request: Request) {
+  const client = await pool.connect();
+  try {
+    await ensureSchema();
+    const payload = (await request.json()) as { from?: string; to?: string };
+    const from = payload.from?.trim() ?? "";
+    const to = payload.to?.trim() ?? "";
+
+    if (!validSeats.has(from) || !validSeats.has(to) || from === to) {
+      return Response.json({ error: "請確認要交換的兩個位子。" }, { status: 400 });
+    }
+
+    await client.query("BEGIN");
+    const rows = await client.query<{
+      seat_key: string;
+      name: string;
+      note: string;
+      reservation_key: string;
+      created_at: Date;
+    }>(
+      `SELECT seat_key, name, note, reservation_key, created_at
+       FROM reservations
+       WHERE seat_key = ANY($1::text[])
+       FOR UPDATE`,
+      [[from, to]],
+    );
+    const fromRow = rows.rows.find((row) => row.seat_key === from);
+    if (!fromRow) {
+      await client.query("ROLLBACK");
+      return Response.json(
+        { error: "這個座位剛剛被取消了，請重新整理後再試。" },
+        { status: 409 },
+      );
+    }
+    const toRow = rows.rows.find((row) => row.seat_key === to);
+
+    await client.query(
+      "DELETE FROM reservations WHERE seat_key = ANY($1::text[])",
+      [[from, to]],
+    );
+
+    const place = async (
+      seatKey: string,
+      row: {
+        name: string;
+        note: string;
+        reservation_key: string;
+        created_at: Date;
+      },
+    ) => {
+      const { section, row: rowNumber, number } = splitSeatKey(seatKey);
+      await client.query(
+        `INSERT INTO reservations
+          (seat_key, section, row_number, seat_number, name, note, reservation_key, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          seatKey,
+          section,
+          rowNumber,
+          number,
+          row.name,
+          row.note,
+          row.reservation_key,
+          row.created_at,
+        ],
+      );
+    };
+
+    await place(to, fromRow);
+    if (toRow) await place(from, toRow);
+
+    await client.query("COMMIT");
+    return Response.json({ ok: true, swapped: Boolean(toRow) });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "";
+    if (code === "23505") {
+      return Response.json(
+        { error: "座位剛被別人選走了，請重新整理後再試。" },
+        { status: 409 },
+      );
+    }
+    console.error("PUT /api/reservations failed", error);
+    return Response.json({ error: "換位失敗，請稍後再試。" }, { status: 500 });
+  } finally {
+    client.release();
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     await ensureSchema();
