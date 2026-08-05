@@ -6,15 +6,17 @@ import {
   allowsBabySeat,
   LUNCH_TOTAL_SEATS,
   lunchSeatKey,
+  lunchSeatLabel,
+  lunchTables,
   tableById,
 } from "@/lib/lunch-tables";
 import {
   assignSeats,
+  guestName,
   openSeatsByTable,
   parseRoster,
   sortAssignments,
   type Assignment,
-  type Party,
 } from "@/lib/seat-assign";
 
 type LunchReservation = {
@@ -24,6 +26,29 @@ type LunchReservation = {
   name: string;
   note: string;
 };
+
+/** 還沒安排到位子的人。 */
+type PoolEntry = {
+  name: string;
+  dept: string;
+  partyName: string;
+  isGuest: boolean;
+};
+
+/** 目前被「拿起來」準備搬動的對象。 */
+type Picked =
+  | { kind: "seat"; seatKey: string }
+  | { kind: "pool"; index: number }
+  | null;
+
+function toPool(item: { name: string; dept: string; partyName?: string; isGuest?: boolean }): PoolEntry {
+  return {
+    name: item.name,
+    dept: item.dept,
+    partyName: item.partyName ?? item.name,
+    isGuest: item.isGuest ?? false,
+  };
+}
 
 const SAMPLE = `姓名\t課別\t參加人數
 王小明\tISDD-01\t1
@@ -36,8 +61,11 @@ export default function ImportPanel() {
   const [keepDeptTogether, setKeepDeptTogether] = useState(true);
   const [bigDeptsFirst, setBigDeptsFirst] = useState(true);
   const [preview, setPreview] = useState<Assignment[] | null>(null);
-  const [unplaced, setUnplaced] = useState<Party[]>([]);
+  /** 排不進去或被手動移出的人，等著被放回座位表。 */
+  const [pool, setPool] = useState<PoolEntry[]>([]);
   const [splitParties, setSplitParties] = useState<string[]>([]);
+  const [picked, setPicked] = useState<Picked>(null);
+  const [showAllTables, setShowAllTables] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -101,14 +129,108 @@ export default function ImportPanel() {
       bigDeptsFirst,
     });
     setPreview(result.assignments);
-    setUnplaced(result.unplaced);
+    // 排不下的組拆成個人，方便一個一個手動安排。
+    setPool(
+      result.unplaced.flatMap((party) =>
+        Array.from({ length: party.size }, (_, index) =>
+          toPool({
+            name: guestName(party.name, index),
+            dept: party.dept,
+            partyName: party.name,
+            isGuest: index > 0,
+          }),
+        ),
+      ),
+    );
     setSplitParties(result.splitParties);
+    setPicked(null);
     const short = result.unplaced.reduce((total, party) => total + party.size, 0);
     setMessage(
       short
-        ? `已排 ${result.assignments.length} 位，還有 ${short} 位排不下（空位只剩 ${freeCount} 個）。`
-        : `已排好 ${result.assignments.length} 位，確認後再寫入。`,
+        ? `已排 ${result.assignments.length} 位，還有 ${short} 位排不下（空位只剩 ${freeCount} 個）。可以在下面手動調整。`
+        : `已排好 ${result.assignments.length} 位。可以在下面手動調整，確認後再寫入。`,
     );
+  }
+
+  /** 點座位表上的人：第一次是拿起來，第二次是放下或互換。 */
+  function tapSeat(seatKey: string, occupiedByPlan: boolean) {
+    if (!preview) return;
+    setMessage("");
+
+    if (!picked) {
+      if (occupiedByPlan) setPicked({ kind: "seat", seatKey });
+      return;
+    }
+
+    if (picked.kind === "seat" && picked.seatKey === seatKey) {
+      setPicked(null);
+      return;
+    }
+
+    const target = tableById.get(seatKey.slice(0, seatKey.lastIndexOf("-")));
+    if (!target) return;
+    const seatNumber = Number(seatKey.slice(seatKey.lastIndexOf("-") + 1));
+
+    if (picked.kind === "pool") {
+      const person = pool[picked.index];
+      if (!person) return;
+      const displaced = preview.find(
+        (item) => lunchSeatKey(item.tableId, item.seatNumber) === seatKey,
+      );
+      setPreview(
+        sortAssignments([
+          ...preview.filter((item) => item !== displaced),
+          {
+            tableId: target.id,
+            seatNumber,
+            name: person.name,
+            dept: person.dept,
+            partyName: person.partyName,
+            isGuest: person.isGuest,
+          },
+        ]),
+      );
+      setPool((current) => [
+        ...current.filter((_, index) => index !== picked.index),
+        ...(displaced ? [toPool(displaced)] : []),
+      ]);
+      setPicked(null);
+      return;
+    }
+
+    // 座位對座位：有人就互換，沒人就搬過去。
+    const from = preview.find(
+      (item) => lunchSeatKey(item.tableId, item.seatNumber) === picked.seatKey,
+    );
+    if (!from) {
+      setPicked(null);
+      return;
+    }
+    const to = preview.find(
+      (item) => lunchSeatKey(item.tableId, item.seatNumber) === seatKey,
+    );
+    const moved = preview.map((item) => {
+      if (item === from) return { ...item, tableId: target.id, seatNumber };
+      if (to && item === to) {
+        return { ...item, tableId: from.tableId, seatNumber: from.seatNumber };
+      }
+      return item;
+    });
+    setPreview(sortAssignments(moved));
+    setPicked(null);
+  }
+
+  /** 把某個人從座位表移到待安排區。 */
+  function removeFromPlan(seatKey: string) {
+    if (!preview) return;
+    const target = preview.find(
+      (item) => lunchSeatKey(item.tableId, item.seatNumber) === seatKey,
+    );
+    if (!target) return;
+    setPreview(preview.filter((item) => item !== target));
+    setPool((current) => [...current, toPool(target)]);
+    setPicked(null);
+    setMessage("");
   }
 
   /**
@@ -135,7 +257,16 @@ export default function ImportPanel() {
     });
     return {
       assignments: sortAssignments([...kept, ...result.assignments]),
-      unplaced: result.unplaced,
+      unplaced: result.unplaced.flatMap((party) =>
+        Array.from({ length: party.size }, (_, index) =>
+          toPool({
+            name: guestName(party.name, index),
+            dept: party.dept,
+            partyName: party.name,
+            isGuest: index > 0,
+          }),
+        ),
+      ),
       displaced: displaced.length,
     };
   }
@@ -149,7 +280,8 @@ export default function ImportPanel() {
     const replan = replanAround(latest, preview);
     if (replan) {
       setPreview(replan.assignments);
-      setUnplaced(replan.unplaced);
+      setPool((current) => [...current, ...replan.unplaced]);
+      setPicked(null);
       setMessage(
         `這期間有 ${replan.displaced} 個位子被別人選走了，已經自動改排到其他空位，尚未寫入任何資料。請再確認一次預覽。`,
       );
@@ -186,7 +318,8 @@ export default function ImportPanel() {
         const retry = fresh ? replanAround(fresh, preview) : null;
         if (retry) {
           setPreview(retry.assignments);
-          setUnplaced(retry.unplaced);
+          setPool((current) => [...current, ...retry.unplaced]);
+          setPicked(null);
         }
         throw new Error(
           `${data.error ?? "寫入失敗"}${retry ? "已自動改排，請再確認一次預覽。" : ""}`,
@@ -195,8 +328,9 @@ export default function ImportPanel() {
       await loadReservations();
       setMessage(`已寫入 ${preview.length} 位。可以回選位頁看結果。`);
       setPreview(null);
-      setUnplaced([]);
+      setPool([]);
       setSplitParties([]);
+      setPicked(null);
       setRaw("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "寫入失敗，請再試一次。");
@@ -205,16 +339,41 @@ export default function ImportPanel() {
     }
   }
 
-  const previewByTable = useMemo(() => {
+  /** 每一桌的每一個位子：已經有人的、這次排進去的、還空著的。 */
+  const editorTables = useMemo(() => {
     if (!preview) return [];
-    const grouped = new Map<string, Assignment[]>();
-    for (const item of preview) {
-      const list = grouped.get(item.tableId);
-      if (list) list.push(item);
-      else grouped.set(item.tableId, [item]);
-    }
-    return [...grouped.entries()];
-  }, [preview]);
+    const existing = new Map(reservations.map((item) => [item.seatKey, item]));
+    const planned = new Map(
+      preview.map((item) => [
+        lunchSeatKey(item.tableId, item.seatNumber),
+        item,
+      ]),
+    );
+    return lunchTables
+      .map((table) => ({
+        table,
+        seats: Array.from({ length: table.capacity }, (_, index) => {
+          const seatNumber = index + 1;
+          const seatKey = lunchSeatKey(table.id, seatNumber);
+          return {
+            seatNumber,
+            seatKey,
+            existing: existing.get(seatKey),
+            planned: planned.get(seatKey),
+          };
+        }),
+      }))
+      .map((entry) => ({
+        ...entry,
+        plannedCount: entry.seats.filter((seat) => seat.planned).length,
+      }))
+      .filter((entry) => showAllTables || entry.plannedCount > 0);
+  }, [preview, reservations, showAllTables]);
+
+  const plannedTableCount = useMemo(
+    () => new Set(preview?.map((item) => item.tableId) ?? []).size,
+    [preview],
+  );
 
   return (
     <main>
@@ -359,34 +518,23 @@ export default function ImportPanel() {
               <div>
                 <span className="step-number">3</span>
                 <div>
-                  <h2>預覽並寫入</h2>
+                  <h2>預覽・微調・寫入</h2>
                   <p>
-                    寫入只會填目前的空位，<b>不會動到已經有人的位子</b>
-                    ；若預覽期間有位子被選走，會自動改排並請你重新確認
+                    點一個人把他「拿起來」，再點另一個位子就搬過去；點到別人身上就
+                    <b>兩人互換</b>。寫入只會填目前的空位，
+                    <b>不會動到已經有人的位子</b>
                   </p>
                 </div>
               </div>
+              <label className="show-all">
+                <input
+                  type="checkbox"
+                  checked={showAllTables}
+                  onChange={(event) => setShowAllTables(event.target.checked)}
+                />
+                <span>顯示全部 45 桌</span>
+              </label>
             </div>
-
-            {unplaced.length > 0 && (
-              <p className="baby-note">
-                <span aria-hidden="true">⚠️</span>
-                <span>
-                  有{" "}
-                  <b>
-                    {unplaced.reduce((total, party) => total + party.size, 0)}
-                  </b>{" "}
-                  位排不進去（空位不足）：
-                  {unplaced
-                    .slice(0, 20)
-                    .map((party) =>
-                      party.size > 1 ? `${party.name}（${party.size} 位）` : party.name,
-                    )
-                    .join("、")}
-                  {unplaced.length > 20 && " …"}
-                </span>
-              </p>
-            )}
 
             {splitParties.length > 0 && (
               <p className="baby-note">
@@ -396,46 +544,135 @@ export default function ImportPanel() {
                   組人數超過單桌容量或剩餘空位不足，同行的人被分到不同桌：
                   {splitParties.slice(0, 20).join("、")}
                   {splitParties.length > 20 && " …"}
-                  。可以在下面預覽確認，或寫入後再自行換桌。
+                  。可以在下面直接調整。
                 </span>
               </p>
             )}
 
+            <div className={`pool-bar ${picked?.kind === "pool" ? "picking" : ""}`}>
+              <b>待安排 {pool.length} 位</b>
+              {pool.length ? (
+                <div className="pool-people">
+                  {pool.map((person, index) => (
+                    <button
+                      key={`${person.name}-${index}`}
+                      className={
+                        picked?.kind === "pool" && picked.index === index
+                          ? "picked"
+                          : ""
+                      }
+                      onClick={() =>
+                        setPicked((current) =>
+                          current?.kind === "pool" && current.index === index
+                            ? null
+                            : { kind: "pool", index },
+                        )
+                      }
+                    >
+                      {person.name}
+                      <small>{person.dept || "—"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="pool-empty">所有人都排好位子了</span>
+              )}
+            </div>
+
+            {picked && (
+              <p className="picked-hint" role="status">
+                已拿起{" "}
+                <b>
+                  {picked.kind === "pool"
+                    ? pool[picked.index]?.name
+                    : preview.find(
+                        (item) =>
+                          lunchSeatKey(item.tableId, item.seatNumber) ===
+                          picked.seatKey,
+                      )?.name}
+                </b>
+                ，請點要放的位子；點空位是搬過去，點別人是互換。
+                <button onClick={() => setPicked(null)}>取消</button>
+              </p>
+            )}
+
             <div className="preview-grid">
-              {previewByTable.map(([tableId, list]) => {
-                const table = tableById.get(tableId)!;
-                return (
-                  <div className="table-card" key={tableId}>
-                    <header>
-                      <b>
-                        {tableId}
-                        {allowsBabySeat(table) && (
-                          <i className="baby-badge" title="可放嬰兒座椅">
-                            🍼
-                          </i>
-                        )}
-                      </b>
-                      <span>
-                        排 {list.length} / {table.capacity} 位
-                      </span>
-                    </header>
-                    <ul className="preview-people">
-                      {list.map((item) => (
-                        <li key={lunchSeatKey(item.tableId, item.seatNumber)}>
-                          <b>{item.seatNumber}</b>
-                          <span>{item.name}</span>
-                          <small>{item.dept || "—"}</small>
+              {editorTables.map(({ table, seats, plannedCount }) => (
+                <div className="table-card" key={table.id}>
+                  <header>
+                    <b>
+                      {table.id}
+                      {allowsBabySeat(table) && (
+                        <i className="baby-badge" title="可放嬰兒座椅">
+                          🍼
+                        </i>
+                      )}
+                    </b>
+                    <span>
+                      排 {plannedCount} / {table.capacity} 位
+                    </span>
+                  </header>
+                  <ul className="preview-people">
+                    {seats.map((seat) => {
+                      if (seat.existing) {
+                        return (
+                          <li className="taken" key={seat.seatKey}>
+                            <b>{seat.seatNumber}</b>
+                            <span>🔒 {seat.existing.name}</span>
+                            <small>已有人</small>
+                          </li>
+                        );
+                      }
+                      const isPicked =
+                        picked?.kind === "seat" && picked.seatKey === seat.seatKey;
+                      return (
+                        <li
+                          className={`${seat.planned ? "planned" : "free"} ${isPicked ? "picked" : ""} ${picked && !seat.planned ? "droppable" : ""}`}
+                          key={seat.seatKey}
+                        >
+                          <b>{seat.seatNumber}</b>
+                          <button
+                            className="seat-tap"
+                            onClick={() =>
+                              tapSeat(seat.seatKey, Boolean(seat.planned))
+                            }
+                            title={
+                              seat.planned
+                                ? `${seat.planned.name}・${lunchSeatLabel(table.id, seat.seatNumber)}`
+                                : lunchSeatLabel(table.id, seat.seatNumber)
+                            }
+                          >
+                            {seat.planned ? (
+                              <>
+                                <span>{seat.planned.name}</span>
+                                <small>{seat.planned.dept || "—"}</small>
+                              </>
+                            ) : (
+                              <span className="free-label">
+                                {picked ? "放這裡" : "空位"}
+                              </span>
+                            )}
+                          </button>
+                          {seat.planned && (
+                            <button
+                              className="seat-remove"
+                              onClick={() => removeFromPlan(seat.seatKey)}
+                              title="移到待安排"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
             </div>
 
             <div className="confirm-bar">
               <div>
-                <span>共 {preview.length} 位、{previewByTable.length} 桌</span>
+                <span>共 {preview.length} 位、{plannedTableCount} 桌{pool.length ? `・還有 ${pool.length} 位待安排` : ""}</span>
                 <strong>寫入後回選位頁就能看到，大家可以自行換位</strong>
               </div>
               <button onClick={commit} disabled={saving || !preview.length}>
