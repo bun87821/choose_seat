@@ -37,7 +37,51 @@ export type AssignOptions = {
   bigDeptsFirst: boolean;
 };
 
+/** 顯示用：維持座位圖上「一排一排由左往右」的閱讀順序。 */
 const tableOrder = new Map(lunchTables.map((item, index) => [item.id, index]));
+
+/**
+ * 把座位圖上 x 座標相近的桌子歸成同一直行。
+ * 相差 3%（約一張桌子的寬度）以內視為同一行。
+ */
+const columnStarts = (() => {
+  const xs = [...new Set(lunchTables.map((item) => item.x))].sort(
+    (a, b) => a - b,
+  );
+  const starts: number[] = [];
+  let previous = Number.NEGATIVE_INFINITY;
+  for (const x of xs) {
+    if (x - previous > 3) starts.push(x);
+    previous = x;
+  }
+  return starts;
+})();
+
+function columnOf(item: LunchTable) {
+  let index = 0;
+  for (let i = 0; i < columnStarts.length; i += 1) {
+    if (item.x >= columnStarts[i] - 0.001) index = i;
+  }
+  return index;
+}
+
+/**
+ * 排位順序：從餐廳最右邊的直行往左推進，同一行由上往下。
+ *
+ * 如果照桌號由左往右排，第一個（也是人最多的）課別會把整排靠窗的
+ * 桌子一次吃光。改成一行一行往左走，每個課別拿到的是縱向的一小塊，
+ * 靠窗的位子就會分散給不同課別。
+ */
+const fillOrder = new Map(
+  [...lunchTables]
+    .sort((a, b) => columnOf(b) - columnOf(a) || a.y - b.y)
+    .map((item, index) => [item.id, index] as const),
+);
+
+/** 匯出給介面說明用：實際的排位推進順序。 */
+export const fillOrderedTableIds = [...fillOrder.entries()]
+  .sort((a, b) => a[1] - b[1])
+  .map(([id]) => id);
 
 /**
  * 一個課別的座位只會落在同一個區塊裡。R 區與 B 區在餐廳的兩側，
@@ -173,9 +217,10 @@ export function assignSeats(
       seats: [...seats].sort((a, b) => a - b),
     }))
     .filter((entry) => entry.table && entry.seats.length)
+    // 由右往左推進，避免同一個課別橫掃整排靠窗的桌子。
     .sort(
       (a, b) =>
-        (tableOrder.get(a.table.id) ?? 0) - (tableOrder.get(b.table.id) ?? 0),
+        (fillOrder.get(a.table.id) ?? 0) - (fillOrder.get(b.table.id) ?? 0),
     );
 
   const assignments: Assignment[] = [];
