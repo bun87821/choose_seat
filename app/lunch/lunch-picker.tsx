@@ -5,12 +5,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   allowsBabySeat,
   babySeatTableIds,
+  FLOOR_ASPECT_RATIO,
+  floorLandmarks,
+  floorTableSize,
   LUNCH_TOTAL_SEATS,
   lunchSeatKey,
   lunchSeatLabel,
+  lunchTables,
   lunchZones,
   tableById,
   zoneOfTable,
+  type LunchTable,
 } from "@/lib/lunch-tables";
 import { isValidPlate, normalizePlate } from "@/lib/plate";
 
@@ -56,6 +61,8 @@ export default function LunchPicker() {
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [activeZone, setActiveZone] = useState<"R" | "B">("R");
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -282,6 +289,68 @@ export default function LunchPicker() {
   }
 
   const activeZoneData = lunchZones.find((zone) => zone.id === activeZone)!;
+  const openTable = openTableId ? tableById.get(openTableId) : undefined;
+
+  function seatNumbersOf(item: LunchTable) {
+    return Array.from({ length: item.capacity }, (_, index) => index + 1);
+  }
+
+  function takenCountOf(item: LunchTable) {
+    return seatNumbersOf(item).filter((seatNumber) =>
+      reservationMap.has(lunchSeatKey(item.id, seatNumber)),
+    ).length;
+  }
+
+  function renderTableCard(item: LunchTable) {
+    const taken = takenCountOf(item);
+    return (
+      <div
+        className={`table-card ${item.shape} ${taken === item.capacity ? "full" : ""}`}
+        key={item.id}
+      >
+        <header>
+          <b>
+            {item.id}
+            {allowsBabySeat(item) && (
+              <i className="baby-badge" title="可放嬰兒座椅">
+                🍼
+              </i>
+            )}
+          </b>
+          <span>
+            {item.capacity - taken} / {item.capacity} 可選
+          </span>
+        </header>
+        <div className="table-seats">
+          {seatNumbersOf(item).map((seatNumber) => {
+            const seatKey = lunchSeatKey(item.id, seatNumber);
+            const reservation = reservationMap.get(seatKey);
+            const selected = selectedSeats.some(
+              (seat) => seat.seatKey === seatKey,
+            );
+            const label = lunchSeatLabel(item.id, seatNumber);
+            return (
+              <button
+                key={seatKey}
+                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""}`}
+                disabled={saving}
+                onClick={() =>
+                  reservation
+                    ? void cancelReservation(reservation)
+                    : toggleSeat({ seatKey, tableId: item.id, seatNumber })
+                }
+                aria-label={`${label}${reservation ? `，${reservation.name} 已選，點擊取消` : "，可選"}`}
+                title={reservation ? `${reservation.name}・${label}` : label}
+              >
+                <span>{seatNumber}</span>
+                {reservation && <small>{reservation.name}</small>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main>
@@ -394,22 +463,40 @@ export default function LunchPicker() {
             </figure>
           )}
 
-          <div className="section-tabs">
-            {lunchZones.map((zone) => (
-              <button
-                key={zone.id}
-                className={activeZone === zone.id ? "active" : ""}
-                onClick={() => setActiveZone(zone.id)}
-              >
-                <b>{zone.label}</b>
-                <span>
-                  {zoneCapacity[zone.id] - zoneTakenCount[zone.id]} 位可選
-                </span>
-              </button>
-            ))}
+          <div className="view-tabs">
+            <button
+              className={viewMode === "map" ? "active" : ""}
+              onClick={() => setViewMode("map")}
+            >
+              平面圖模式
+            </button>
+            <button
+              className={viewMode === "list" ? "active" : ""}
+              onClick={() => setViewMode("list")}
+            >
+              清單模式
+            </button>
           </div>
 
-          <p className="zone-hint">{activeZoneData.hint}</p>
+          {viewMode === "list" && (
+            <>
+              <div className="section-tabs">
+                {lunchZones.map((zone) => (
+                  <button
+                    key={zone.id}
+                    className={activeZone === zone.id ? "active" : ""}
+                    onClick={() => setActiveZone(zone.id)}
+                  >
+                    <b>{zone.label}</b>
+                    <span>
+                      {zoneCapacity[zone.id] - zoneTakenCount[zone.id]} 位可選
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="zone-hint">{activeZoneData.hint}</p>
+            </>
+          )}
 
           <p className="baby-note">
             <span aria-hidden="true">🍼</span>
@@ -421,79 +508,114 @@ export default function LunchPicker() {
             </span>
           </p>
 
-          <div className="table-map" aria-busy={loading}>
-            {activeZoneData.groups.map((group) => (
-              <div className="table-group" key={group.id}>
-                <h3>{group.label}</h3>
-                <div className="table-grid">
-                  {group.tables.map((item) => {
-                    const seatNumbers = Array.from(
-                      { length: item.capacity },
-                      (_, index) => index + 1,
-                    );
-                    const taken = seatNumbers.filter((seatNumber) =>
-                      reservationMap.has(lunchSeatKey(item.id, seatNumber)),
-                    ).length;
-                    return (
-                      <div
-                        className={`table-card ${item.shape} ${taken === item.capacity ? "full" : ""}`}
-                        key={item.id}
+          {viewMode === "map" ? (
+            <>
+              <p className="map-hint">
+                桌子的位置與座位圖一致。點一張桌子就會展開該桌位子，選好之後可以再點別桌繼續選。
+                <span className="scroll-hint">手機請左右滑動查看完整平面圖。</span>
+              </p>
+
+              <div className="floor-map-wrap">
+                <div
+                  className="floor-map"
+                  style={{ aspectRatio: FLOOR_ASPECT_RATIO }}
+                  aria-busy={loading}
+                >
+                  <div className="floor-map-inner">
+                    {floorLandmarks.map((landmark) => (
+                      <span
+                        className="floor-landmark"
+                        key={landmark.label}
+                        style={{ left: `${landmark.x}%`, top: `${landmark.y}%` }}
                       >
-                        <header>
-                          <b>
-                            {item.id}
-                            {allowsBabySeat(item) && (
-                              <i className="baby-badge" title="可放嬰兒座椅">
-                                🍼
-                              </i>
-                            )}
-                          </b>
-                          <span>
-                            {item.capacity - taken} / {item.capacity} 可選
+                        {landmark.label}
+                      </span>
+                    ))}
+                    {lunchTables.map((item) => {
+                      const taken = takenCountOf(item);
+                      const full = taken === item.capacity;
+                      const size = floorTableSize(item);
+                      const selectedHere = selectedSeats.filter(
+                        (seat) => seat.tableId === item.id,
+                      ).length;
+                      return (
+                        <button
+                          key={item.id}
+                          className={`floor-table ${item.shape} ${full ? "full" : ""} ${openTableId === item.id ? "open" : ""} ${selectedHere ? "has-selected" : ""}`}
+                          style={{
+                            left: `${item.x}%`,
+                            top: `${item.y}%`,
+                            width: size.width,
+                            height: size.height,
+                          }}
+                          onClick={() =>
+                            setOpenTableId((current) =>
+                              current === item.id ? null : item.id,
+                            )
+                          }
+                          aria-expanded={openTableId === item.id}
+                          title={`${item.id} 桌・${item.capacity} 人・剩 ${item.capacity - taken} 位${allowsBabySeat(item) ? "・可放嬰兒座椅" : ""}`}
+                        >
+                          {allowsBabySeat(item) && (
+                            <i className="floor-baby" aria-hidden="true">
+                              🍼
+                            </i>
+                          )}
+                          <b>{item.id}</b>
+                          <span className="floor-dots">
+                            {seatNumbersOf(item).map((seatNumber) => {
+                              const seatKey = lunchSeatKey(item.id, seatNumber);
+                              const state = reservationMap.has(seatKey)
+                                ? "taken"
+                                : selectedSeats.some(
+                                      (seat) => seat.seatKey === seatKey,
+                                    )
+                                  ? "picked"
+                                  : "free";
+                              return <i className={state} key={seatKey} />;
+                            })}
                           </span>
-                        </header>
-                        <div className="table-seats">
-                          {seatNumbers.map((seatNumber) => {
-                            const seatKey = lunchSeatKey(item.id, seatNumber);
-                            const reservation = reservationMap.get(seatKey);
-                            const selected = selectedSeats.some(
-                              (seat) => seat.seatKey === seatKey,
-                            );
-                            const label = lunchSeatLabel(item.id, seatNumber);
-                            return (
-                              <button
-                                key={seatKey}
-                                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""}`}
-                                disabled={saving}
-                                onClick={() =>
-                                  reservation
-                                    ? void cancelReservation(reservation)
-                                    : toggleSeat({
-                                        seatKey,
-                                        tableId: item.id,
-                                        seatNumber,
-                                      })
-                                }
-                                aria-label={`${label}${reservation ? `，${reservation.name} 已選，點擊取消` : "，可選"}`}
-                                title={
-                                  reservation
-                                    ? `${reservation.name}・${label}`
-                                    : label
-                                }
-                              >
-                                <span>{seatNumber}</span>
-                                {reservation && <small>{reservation.name}</small>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+
+              {openTable ? (
+                <div className="table-detail">
+                  <div className="table-detail-head">
+                    <span>
+                      <b>
+                        {openTable.id} 桌・{openTable.capacity} 人
+                        {allowsBabySeat(openTable) && "・🍼 可放嬰兒座椅"}
+                      </b>
+                      <small>
+                        還有 {openTable.capacity - takenCountOf(openTable)} 個空位
+                      </small>
+                    </span>
+                    <button onClick={() => setOpenTableId(null)}>收起</button>
+                  </div>
+                  {renderTableCard(openTable)}
+                </div>
+              ) : (
+                <p className="table-detail-empty">
+                  ↑ 點平面圖上的任一張桌子，這裡就會顯示該桌的位子
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="table-map" aria-busy={loading}>
+              {activeZoneData.groups.map((group) => (
+                <div className="table-group" key={group.id}>
+                  <h3>{group.label}</h3>
+                  <div className="table-grid">
+                    {group.tables.map((item) => renderTableCard(item))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="confirm-bar">
             <div>

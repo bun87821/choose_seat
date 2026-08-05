@@ -160,6 +160,44 @@ input:disabled { color: #718078; background: #eef2ee; }
 .baby-note b { color: #6b4a25; }
 .baby-badge { margin-left: 5px; font-size: 13px; font-style: normal; vertical-align: 1px; }
 
+.view-tabs { display: flex; justify-content: center; gap: 6px; margin: 22px auto 20px; padding: 5px; width: fit-content; border-radius: 999px; background: #eef3ef; }
+.view-tabs button { padding: 9px 22px; border: 0; border-radius: 999px; color: #62736a; background: transparent; font-size: 13px; font-weight: 800; cursor: pointer; }
+.view-tabs button.active { color: white; background: var(--green); box-shadow: 0 6px 14px rgba(15,90,59,.2); }
+
+.map-hint { margin: 0 0 14px; color: #718078; font-size: 12px; font-weight: 700; text-align: center; line-height: 1.7; }
+.map-hint .scroll-hint { display: none; }
+
+.floor-map-wrap { overflow-x: auto; padding-bottom: 6px; }
+.floor-map { position: relative; min-width: 1000px; padding: 26px 30px; border: 1px solid var(--line); border-radius: 18px; background:
+  radial-gradient(circle at 12px 12px, rgba(20,90,60,.05) 0 1px, transparent 1.6px) 0 0 / 24px 24px, #fbfcfa; }
+.floor-map-inner { position: absolute; inset: 26px 30px; }
+
+.floor-landmark { position: absolute; transform: translate(-50%, -50%); padding: 4px 10px; border: 1px dashed #d3ddd6; border-radius: 8px; color: #97a49c; background: rgba(255,255,255,.75); font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+.floor-table { position: absolute; transform: translate(-50%, -50%); display: grid; align-content: center; justify-items: center; gap: 3px; padding: 2px; border: 1.5px solid #a9bcb0; border-radius: 7px; color: var(--ink); background: white; cursor: pointer; transition: transform .14s ease, box-shadow .14s ease; }
+.floor-table.round { border-radius: 50%; }
+.floor-table:hover { transform: translate(-50%, -50%) scale(1.09); border-color: var(--green-bright); box-shadow: 0 6px 14px rgba(23,75,50,.16); z-index: 3; }
+.floor-table.open { border: 2.5px solid var(--green); background: var(--mint); box-shadow: 0 6px 16px rgba(15,90,59,.25); z-index: 4; }
+.floor-table.has-selected { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(239,131,84,.2); }
+.floor-table.full { border-color: #d6dbd8; color: #93a09a; background: #eceeed; }
+.floor-table b { font-size: 12px; line-height: 1; letter-spacing: -.01em; }
+.floor-table .floor-dots { max-width: 82%; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.floor-table .floor-dots i { width: 6px; height: 6px; border-radius: 50%; background: #cfe0d5; }
+.floor-table .floor-dots i.taken { background: #97a59d; }
+.floor-table .floor-dots i.picked { background: var(--orange); }
+.floor-table.open .floor-dots i { background: #a9c9b7; }
+.floor-baby { position: absolute; top: -4px; right: -4px; width: 15px; height: 15px; display: grid; place-items: center; border: 1px solid #f0dcc2; border-radius: 50%; background: #fff6e9; font-size: 9px; font-style: normal; line-height: 1; }
+.floor-table.round .floor-baby { top: 8%; right: 6%; }
+
+.table-detail { margin-top: 20px; padding: 15px 16px; border: 1px solid #b7d9c6; border-radius: 16px; background: #f2faf6; }
+.table-detail-head { margin-bottom: 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.table-detail-head b { font-size: 16px; }
+.table-detail-head button { padding: 7px 14px; border: 1px solid #b9c9be; border-radius: 9px; color: var(--ink); background: white; font-size: 12px; cursor: pointer; }
+.table-detail .table-card { border-color: #cfe3d7; }
+.table-detail .table-card > header { display: none; }
+.table-detail-head small { margin-left: 8px; color: #6b8a79; font-size: 12px; font-weight: 700; }
+.table-detail-empty { margin: 18px 0 0; color: #8b998f; font-size: 12px; font-weight: 700; text-align: center; }
+
 .table-map { display: grid; gap: 26px; padding-bottom: 6px; }
 .table-group h3 { margin: 0 0 12px; padding-left: 10px; border-left: 4px solid var(--green-bright); color: #47594f; font-size: 14px; }
 .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; }
@@ -220,6 +258,10 @@ footer { padding: 28px 0 0; color: #6e7e75; font-size: 12px; text-align: center;
   .parking-form { grid-template-columns: 1fr; }
   .parking-form button { width: 100%; }
   .table-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .map-hint .scroll-hint { display: block; }
+  .floor-map-wrap { margin: 0 -6px; }
+  .floor-map { padding: 20px; }
+  .floor-map-inner { inset: 20px; }
 }
 
 @media (max-width: 460px) {
