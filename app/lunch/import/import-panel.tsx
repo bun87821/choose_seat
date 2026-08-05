@@ -12,6 +12,7 @@ import {
   assignSeats,
   openSeatsByTable,
   parseRoster,
+  sortAssignments,
   type Assignment,
   type Person,
 } from "@/lib/seat-assign";
@@ -39,24 +40,37 @@ export default function ImportPanel() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const loadReservations = useCallback(async () => {
-    try {
-      const response = await fetch("/api/lunch-reservations", {
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("載入失敗");
-      const data = (await response.json()) as {
-        reservations: LunchReservation[];
-      };
-      setReservations(data.reservations);
-    } catch {
-      setMessage("暫時無法讀取目前座位，請重新整理後再試。");
-    }
+  const fetchReservations = useCallback(async () => {
+    const response = await fetch("/api/lunch-reservations", {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("載入失敗");
+    const data = (await response.json()) as {
+      reservations: LunchReservation[];
+    };
+    return data.reservations;
   }, []);
 
+  const loadReservations = useCallback(
+    async (quiet = false) => {
+      try {
+        const latest = await fetchReservations();
+        setReservations(latest);
+        return latest;
+      } catch {
+        if (!quiet) setMessage("暫時無法讀取目前座位，請重新整理後再試。");
+        return null;
+      }
+    },
+    [fetchReservations],
+  );
+
   useEffect(() => {
+    // 座位隨時可能被別人選走，這裡持續同步，預覽才會排在真正的空位上。
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadReservations();
+    const timer = window.setInterval(() => void loadReservations(true), 5000);
+    return () => window.clearInterval(timer);
   }, [loadReservations]);
 
   const parsed = useMemo(() => parseRoster(raw), [raw]);
@@ -92,10 +106,53 @@ export default function ImportPanel() {
     );
   }
 
+  /**
+   * 把預覽中「位子已經被別人選走」的人重新排到其他空位，
+   * 其餘人的安排維持不動。回傳 null 代表沒有衝突。
+   */
+  function replanAround(latest: LunchReservation[], current: Assignment[]) {
+    const taken = new Set(latest.map((item) => item.seatKey));
+    const kept = current.filter(
+      (item) => !taken.has(lunchSeatKey(item.tableId, item.seatNumber)),
+    );
+    const displaced = current
+      .filter((item) => taken.has(lunchSeatKey(item.tableId, item.seatNumber)))
+      .map((item) => ({ name: item.name, dept: item.dept }));
+    if (!displaced.length) return null;
+
+    const used = new Set([
+      ...taken,
+      ...kept.map((item) => lunchSeatKey(item.tableId, item.seatNumber)),
+    ]);
+    const result = assignSeats(displaced, openSeatsByTable(used), {
+      keepDeptTogether,
+      bigDeptsFirst,
+    });
+    return {
+      assignments: sortAssignments([...kept, ...result.assignments]),
+      unplaced: result.unplaced,
+      displaced: displaced.length,
+    };
+  }
+
   async function commit() {
     if (!preview?.length) return;
+
+    // 寫入前再抓一次最新狀況，確定不會動到已經有人的位子。
+    const latest = await loadReservations();
+    if (!latest) return;
+    const replan = replanAround(latest, preview);
+    if (replan) {
+      setPreview(replan.assignments);
+      setUnplaced(replan.unplaced);
+      setMessage(
+        `這期間有 ${replan.displaced} 個位子被別人選走了，已經自動改排到其他空位，尚未寫入任何資料。請再確認一次預覽。`,
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
-      `要把這 ${preview.length} 位寫入座位嗎？\n\n寫入後大家仍然可以自行換位或換桌。`,
+      `要把這 ${preview.length} 位寫入座位嗎？\n\n只會填目前的空位，不會動到已經有人的位子。寫入後大家仍然可以自行換位或換桌。`,
     );
     if (!confirmed) return;
 
@@ -114,8 +171,22 @@ export default function ImportPanel() {
           })),
         }),
       });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "寫入失敗");
+      const data = (await response.json()) as {
+        error?: string;
+        conflicts?: string[];
+      };
+      if (!response.ok) {
+        // 伺服器擋下來代表在這一瞬間又有人選走位子，整批都沒寫入。
+        const fresh = await loadReservations(true);
+        const retry = fresh ? replanAround(fresh, preview) : null;
+        if (retry) {
+          setPreview(retry.assignments);
+          setUnplaced(retry.unplaced);
+        }
+        throw new Error(
+          `${data.error ?? "寫入失敗"}${retry ? "已自動改排，請再確認一次預覽。" : ""}`,
+        );
+      }
       await loadReservations();
       setMessage(`已寫入 ${preview.length} 位。可以回選位頁看結果。`);
       setPreview(null);
@@ -123,7 +194,6 @@ export default function ImportPanel() {
       setRaw("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "寫入失敗，請再試一次。");
-      await loadReservations();
     } finally {
       setSaving(false);
     }
@@ -282,7 +352,10 @@ export default function ImportPanel() {
                 <span className="step-number">3</span>
                 <div>
                   <h2>預覽並寫入</h2>
-                  <p>確認沒問題再寫入；寫入只會用目前的空位，不會蓋掉已經有人的位子</p>
+                  <p>
+                    寫入只會填目前的空位，<b>不會動到已經有人的位子</b>
+                    ；若預覽期間有位子被選走，會自動改排並請你重新確認
+                  </p>
                 </div>
               </div>
             </div>

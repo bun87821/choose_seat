@@ -113,6 +113,26 @@ export async function POST(request: Request) {
     }
 
     await client.query("BEGIN");
+
+    // 已經有人的位子絕對不動：先擋下來並回報是哪幾個，
+    // 真的剛好同時寫入時還有主鍵當最後一道防線。
+    const clash = await client.query<{ seat_key: string; name: string }>(
+      `SELECT seat_key, name FROM lunch_reservations
+       WHERE seat_key = ANY($1::text[])
+       FOR UPDATE`,
+      [seatKeys],
+    );
+    if (clash.rows.length) {
+      await client.query("ROLLBACK");
+      return Response.json(
+        {
+          error: `有 ${clash.rows.length} 個位子已經有人了，沒有寫入任何資料。`,
+          conflicts: clash.rows.map((row) => row.seat_key),
+        },
+        { status: 409 },
+      );
+    }
+
     for (const [index, entry] of entries.entries()) {
       await client.query(
         `INSERT INTO lunch_reservations

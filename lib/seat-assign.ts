@@ -127,6 +127,15 @@ function findBlock(open: OpenTable[], need: number) {
   return best;
 }
 
+/** 依座位圖順序排好，合併兩批排位結果時用。 */
+export function sortAssignments(assignments: Assignment[]) {
+  return [...assignments].sort(
+    (a, b) =>
+      (tableOrder.get(a.tableId) ?? 0) - (tableOrder.get(b.tableId) ?? 0) ||
+      a.seatNumber - b.seatNumber,
+  );
+}
+
 export function assignSeats(
   people: Person[],
   openSeats: Map<string, number[]>,
