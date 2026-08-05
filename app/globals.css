@@ -349,6 +349,15 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 11px 12px; border-bottom: 1px solid #edf0ed; text-align: left; }
 th { color: #6b7b72; background: #f6f8f5; }
 .table-action { padding: 6px 10px; color: #8a4d37; font-size: 12px; }
+.dept-filter { padding: 15px 0 3px; display: grid; gap: 9px; }
+.dept-filter > b { color: #62736a; font-size: 12px; }
+.dept-filter > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.dept-filter button { padding: 6px 12px; display: inline-flex; align-items: baseline; gap: 6px; border: 1px solid #d7e2da; border-radius: 999px; background: white; color: #4d5f55; font-size: 13px; cursor: pointer; }
+.dept-filter button i { color: #93a49a; font-style: normal; font-size: 11px; font-weight: 800; }
+.dept-filter button:hover { border-color: var(--green-bright); }
+.dept-filter button.active { border-color: var(--green); color: white; background: var(--green); }
+.dept-filter button.active i { color: #b9e3cd; }
+
 .roster-actions { flex-wrap: wrap; }
 .roster-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .roster-buttons button { white-space: nowrap; }

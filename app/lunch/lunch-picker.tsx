@@ -76,6 +76,8 @@ export default function LunchPicker() {
   const [showList, setShowList] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [query, setQuery] = useState("");
+  /** 名單只看某個部門／備註；空字串代表全部。 */
+  const [deptFilter, setDeptFilter] = useState("");
   /** 從搜尋結果點過去的那個位子，會多一圈強調。 */
   const [foundKey, setFoundKey] = useState<string | null>(null);
 
@@ -164,6 +166,41 @@ export default function LunchPicker() {
     () => new Set(searchResults.map((item) => item.seatKey)),
     [searchResults],
   );
+
+  const NO_DEPT = "（未填）";
+
+  /** 名單裡出現過的部門／備註與人數，多的排前面。 */
+  const deptOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of reservations) {
+      const key = item.note.trim() || NO_DEPT;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+  }, [reservations]);
+
+  /** 套用篩選後、依桌號排好的名單。 */
+  const rosterRows = useMemo(() => {
+    return reservations
+      .filter(
+        (item) =>
+          !deptFilter || (item.note.trim() || NO_DEPT) === deptFilter,
+      )
+      .slice()
+      .sort(
+        (a, b) =>
+          a.tableId.localeCompare(b.tableId) || a.seatNumber - b.seatNumber,
+      );
+  }, [reservations, deptFilter]);
+
+  const rosterKeys = useMemo(
+    () => rosterRows.map((item) => item.seatKey),
+    [rosterRows],
+  );
+  const allRosterChecked =
+    rosterKeys.length > 0 && rosterKeys.every((key) => cancelKeys.includes(key));
 
   /** 跳到某個人的位子：切到他所在的區，捲過去並標記起來。 */
   function goToSeat(reservation: LunchReservation) {
@@ -556,14 +593,13 @@ export default function LunchPicker() {
   }
 
   function downloadSeatCsv() {
-    downloadCsv("0807午餐座位名單.csv", [
+    downloadCsv(
+      deptFilter
+        ? `0807午餐座位名單_${deptFilter}.csv`
+        : "0807午餐座位名單.csv",
+      [
       ["區域", "桌號", "位子", "姓名", "部門／備註", "可放嬰兒座椅", "選位時間"],
-      ...reservations
-        .slice()
-        .sort(
-          (a, b) =>
-            a.tableId.localeCompare(b.tableId) || a.seatNumber - b.seatNumber,
-        )
+      ...rosterRows
         .map((item) => {
           const table = tableById.get(item.tableId);
           return [
@@ -576,7 +612,8 @@ export default function LunchPicker() {
             new Date(item.createdAt).toLocaleString("zh-TW"),
           ];
         }),
-    ]);
+      ],
+    );
   }
 
   function downloadPlateCsv() {
@@ -1301,11 +1338,41 @@ export default function LunchPicker() {
           </button>
           {showList && (
             <div className="roster-content">
+              {deptOptions.length > 1 && (
+                <div className="dept-filter">
+                  <b>只看</b>
+                  <div>
+                    <button
+                      className={deptFilter === "" ? "active" : ""}
+                      onClick={() => setDeptFilter("")}
+                    >
+                      全部 <i>{reservations.length}</i>
+                    </button>
+                    {deptOptions.map(([dept, count]) => (
+                      <button
+                        key={dept}
+                        className={deptFilter === dept ? "active" : ""}
+                        onClick={() =>
+                          setDeptFilter((current) =>
+                            current === dept ? "" : dept,
+                          )
+                        }
+                      >
+                        {dept} <i>{count}</i>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="roster-actions">
                 <p>
                   名單每 5 秒自動更新。勾選左邊的方框可以一次換桌或取消多個位子，
+                  {deptFilter && (
+                    <b>目前只顯示「{deptFilter}」{rosterRows.length} 位。</b>
+                  )}
                   {cancelKeys.length > 0 && (
-                    <b>目前已勾選 {cancelKeys.length} 個。</b>
+                    <b>已勾選 {cancelKeys.length} 個。</b>
                   )}
                 </p>
                 <div className="roster-buttons">
@@ -1361,12 +1428,12 @@ export default function LunchPicker() {
                       ? "處理中…"
                       : `取消所選${cancelKeys.length ? ` ${cancelKeys.length} 個` : ""}`}
                   </button>
-                  <button onClick={downloadSeatCsv} disabled={!reservations.length}>
-                    下載座位 CSV
+                  <button onClick={downloadSeatCsv} disabled={!rosterRows.length}>
+                    下載座位 CSV{deptFilter ? `（${rosterRows.length} 位）` : ""}
                   </button>
                 </div>
               </div>
-              {reservations.length ? (
+              {rosterRows.length ? (
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -1375,15 +1442,16 @@ export default function LunchPicker() {
                           <input
                             type="checkbox"
                             aria-label="全選"
-                            checked={
-                              cancelKeys.length > 0 &&
-                              cancelKeys.length === reservations.length
-                            }
+                            checked={allRosterChecked}
                             onChange={(event) =>
-                              setCancelKeys(
+                              setCancelKeys((current) =>
                                 event.target.checked
-                                  ? reservations.map((item) => item.seatKey)
-                                  : [],
+                                  ? Array.from(
+                                      new Set([...current, ...rosterKeys]),
+                                    )
+                                  : current.filter(
+                                      (key) => !rosterKeys.includes(key),
+                                    ),
                               )
                             }
                           />
@@ -1395,14 +1463,7 @@ export default function LunchPicker() {
                       </tr>
                     </thead>
                     <tbody>
-                      {reservations
-                        .slice()
-                        .sort(
-                          (a, b) =>
-                            a.tableId.localeCompare(b.tableId) ||
-                            a.seatNumber - b.seatNumber,
-                        )
-                        .map((item) => {
+                      {rosterRows.map((item) => {
                           const table = tableById.get(item.tableId);
                           return (
                           <tr
@@ -1438,7 +1499,11 @@ export default function LunchPicker() {
                   </table>
                 </div>
               ) : (
-                <p className="empty">目前還沒有人選位，成為第一位吧！</p>
+                <p className="empty">
+                  {deptFilter
+                    ? `「${deptFilter}」目前沒有人選位。`
+                    : "目前還沒有人選位，成為第一位吧！"}
+                </p>
               )}
             </div>
           )}
