@@ -61,7 +61,7 @@ export default function LunchPicker() {
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [activeZone, setActiveZone] = useState<"R" | "B">("R");
-  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [viewMode, setViewMode] = useState<"map" | "list">("list");
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -289,6 +289,8 @@ export default function LunchPicker() {
   }
 
   const activeZoneData = lunchZones.find((zone) => zone.id === activeZone)!;
+  const activeZoneTables = activeZoneData.groups.flatMap((group) => group.tables);
+  const activeZoneColumns = Math.max(...activeZoneTables.map((item) => item.col));
   const openTable = openTableId ? tableById.get(openTableId) : undefined;
 
   function seatNumbersOf(item: LunchTable) {
@@ -321,6 +323,7 @@ export default function LunchPicker() {
             {item.capacity - taken} / {item.capacity} 可選
           </span>
         </header>
+        {item.hint && <p className="table-hint">{item.hint}</p>}
         <div className="table-seats">
           {seatNumbersOf(item).map((seatNumber) => {
             const seatKey = lunchSeatKey(item.id, seatNumber);
@@ -465,16 +468,16 @@ export default function LunchPicker() {
 
           <div className="view-tabs">
             <button
-              className={viewMode === "map" ? "active" : ""}
-              onClick={() => setViewMode("map")}
-            >
-              平面圖模式
-            </button>
-            <button
               className={viewMode === "list" ? "active" : ""}
               onClick={() => setViewMode("list")}
             >
-              清單模式
+              座位卡片
+            </button>
+            <button
+              className={viewMode === "map" ? "active" : ""}
+              onClick={() => setViewMode("map")}
+            >
+              平面圖總覽
             </button>
           </div>
 
@@ -605,16 +608,32 @@ export default function LunchPicker() {
               )}
             </>
           ) : (
-            <div className="table-map" aria-busy={loading}>
-              {activeZoneData.groups.map((group) => (
-                <div className="table-group" key={group.id}>
-                  <h3>{group.label}</h3>
-                  <div className="table-grid">
-                    {group.tables.map((item) => renderTableCard(item))}
-                  </div>
+            <>
+              <p className="map-hint">
+                卡片的前後左右順序與座位圖一致，位子直接顯示在卡片上。
+                <span className="scroll-hint">手機請左右滑動查看完整排列。</span>
+              </p>
+              <div className="table-grid-wrap">
+                <div
+                  className="table-grid-map"
+                  aria-busy={loading}
+                  style={{
+                    gridTemplateColumns: `repeat(${activeZoneColumns}, minmax(146px, 1fr))`,
+                    minWidth: activeZoneColumns * 146 + (activeZoneColumns - 1) * 12,
+                  }}
+                >
+                  {activeZoneTables.map((item) => (
+                    <div
+                      key={item.id}
+                      className="table-cell"
+                      style={{ gridColumn: item.col, gridRow: item.row }}
+                    >
+                      {renderTableCard(item)}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            </>
           )}
 
           <div className="confirm-bar">
