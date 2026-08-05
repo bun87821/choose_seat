@@ -68,7 +68,16 @@ export function ensureLunchSchema() {
           name TEXT NOT NULL,
           note TEXT NOT NULL DEFAULT '',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );`,
+        );
+        -- 早期版本會把 ABC-1234 與 ABC1234 存成兩筆，這裡統一成無符號寫法。
+        DELETE FROM parking_plates a
+          USING parking_plates b
+          WHERE a.created_at > b.created_at
+            AND UPPER(REGEXP_REPLACE(a.plate, '[^A-Za-z0-9]', '', 'g'))
+              = UPPER(REGEXP_REPLACE(b.plate, '[^A-Za-z0-9]', '', 'g'));
+        UPDATE parking_plates
+          SET plate = UPPER(REGEXP_REPLACE(plate, '[^A-Za-z0-9]', '', 'g'))
+          WHERE plate <> UPPER(REGEXP_REPLACE(plate, '[^A-Za-z0-9]', '', 'g'));`,
       )
       .then(() => undefined)
       .catch((error) => {

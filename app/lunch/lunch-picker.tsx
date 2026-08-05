@@ -17,7 +17,7 @@ import {
   zoneOfTable,
   type LunchTable,
 } from "@/lib/lunch-tables";
-import { isValidPlate, normalizePlate } from "@/lib/plate";
+import { formatPlate, isValidPlate, normalizePlate } from "@/lib/plate";
 
 type LunchReservation = {
   seatKey: string;
@@ -58,6 +58,7 @@ export default function LunchPicker() {
   const [reservations, setReservations] = useState<LunchReservation[]>([]);
   const [plates, setPlates] = useState<PlateEntry[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<SelectedSeat[]>([]);
+  const [cancelKeys, setCancelKeys] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [activeZone, setActiveZone] = useState<"R" | "B">("R");
@@ -88,6 +89,11 @@ export default function LunchPicker() {
       const plateData = (await plateResponse.json()) as { plates: PlateEntry[] };
       setReservations(seatData.reservations);
       setPlates(plateData.plates);
+      // 別人先取消掉的位子就不必留在待取消清單裡。
+      const liveKeys = new Set(
+        seatData.reservations.map((item) => item.seatKey),
+      );
+      setCancelKeys((current) => current.filter((key) => liveKeys.has(key)));
     } catch {
       if (!quiet) setMessage("暫時無法載入資料，請重新整理後再試。");
     } finally {
@@ -175,21 +181,47 @@ export default function LunchPicker() {
     }
   }
 
-  async function cancelReservation(reservation: LunchReservation) {
-    const label = lunchSeatLabel(reservation.tableId, reservation.seatNumber);
-    if (!window.confirm(`確定取消 ${reservation.name} 的 ${label} 嗎？`)) return;
+  function toggleCancel(seatKey: string) {
+    setCancelKeys((current) =>
+      current.includes(seatKey)
+        ? current.filter((key) => key !== seatKey)
+        : [...current, seatKey],
+    );
+  }
+
+  async function cancelSelected() {
+    const targets = cancelKeys
+      .map((key) => reservationMap.get(key))
+      .filter((item): item is LunchReservation => Boolean(item));
+    if (!targets.length) return;
+
+    const preview = targets
+      .slice(0, 8)
+      .map(
+        (item) =>
+          `${lunchSeatLabel(item.tableId, item.seatNumber)}（${item.name}）`,
+      )
+      .join("\n");
+    const confirmed = window.confirm(
+      `確定要取消以下 ${targets.length} 個位子嗎？\n\n${preview}${targets.length > 8 ? `\n…等共 ${targets.length} 個` : ""}`,
+    );
+    if (!confirmed) return;
+
     setSaving(true);
+    setMessage("");
     try {
       const response = await fetch("/api/lunch-reservations", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seatKey: reservation.seatKey }),
+        body: JSON.stringify({ seatKeys: targets.map((item) => item.seatKey) }),
       });
       if (!response.ok) throw new Error("取消失敗");
       await loadAll(true);
-      setMessage(`已取消 ${label}。`);
+      setMessage(`已取消 ${targets.length} 個位子。`);
+      setCancelKeys([]);
     } catch {
       setMessage("取消失敗，請稍後再試。");
+      await loadAll(true);
     } finally {
       setSaving(false);
     }
@@ -221,7 +253,9 @@ export default function LunchPicker() {
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "登記失敗");
       await loadAll(true);
-      setPlateMessage(`已登記車號 ${cleanedPlate}，用餐當天由餐廳折抵停車費。`);
+      setPlateMessage(
+        `已登記車號 ${formatPlate(cleanedPlate)}，用餐當天由餐廳折抵停車費。`,
+      );
       setPlateNumber("");
       setPlateNote("");
     } catch (error) {
@@ -234,7 +268,10 @@ export default function LunchPicker() {
   }
 
   async function removePlate(entry: PlateEntry) {
-    if (!window.confirm(`確定刪除 ${entry.name} 的車號 ${entry.plate} 嗎？`)) return;
+    if (
+      !window.confirm(`確定刪除 ${entry.name} 的車號 ${formatPlate(entry.plate)} 嗎？`)
+    )
+      return;
     setPlateSaving(true);
     try {
       const response = await fetch("/api/parking", {
@@ -244,7 +281,7 @@ export default function LunchPicker() {
       });
       if (!response.ok) throw new Error("刪除失敗");
       await loadAll(true);
-      setPlateMessage(`已刪除車號 ${entry.plate}。`);
+      setPlateMessage(`已刪除車號 ${formatPlate(entry.plate)}。`);
     } catch {
       setPlateMessage("刪除失敗，請稍後再試。");
     } finally {
@@ -280,7 +317,7 @@ export default function LunchPicker() {
     downloadCsv("0807午餐停車折抵車號.csv", [
       ["車號", "車主姓名", "備註", "登記時間"],
       ...plates.map((item) => [
-        item.plate,
+        formatPlate(item.plate),
         item.name,
         item.note,
         new Date(item.createdAt).toLocaleString("zh-TW"),
@@ -332,18 +369,24 @@ export default function LunchPicker() {
               (seat) => seat.seatKey === seatKey,
             );
             const label = lunchSeatLabel(item.id, seatNumber);
+            const marked = cancelKeys.includes(seatKey);
             return (
               <button
                 key={seatKey}
-                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""}`}
+                className={`seat-button ${reservation ? "occupied" : ""} ${selected ? "selected" : ""} ${marked ? "to-cancel" : ""}`}
                 disabled={saving}
                 onClick={() =>
                   reservation
-                    ? void cancelReservation(reservation)
+                    ? toggleCancel(seatKey)
                     : toggleSeat({ seatKey, tableId: item.id, seatNumber })
                 }
-                aria-label={`${label}${reservation ? `，${reservation.name} 已選，點擊取消` : "，可選"}`}
-                title={reservation ? `${reservation.name}・${label}` : label}
+                aria-pressed={reservation ? marked : selected}
+                aria-label={`${label}${reservation ? `，${reservation.name} 已選，點擊標記取消` : "，可選"}`}
+                title={
+                  reservation
+                    ? `${reservation.name}・${label}・點擊標記取消`
+                    : label
+                }
               >
                 <span>{seatNumber}</span>
                 {reservation && <small>{reservation.name}</small>}
@@ -431,7 +474,9 @@ export default function LunchPicker() {
               <span className="step-number">2</span>
               <div>
                 <h2>選擇你的桌次與位子</h2>
-                <p>可同時選擇多個空位；已有人的位子點擊後可取消</p>
+                <p>
+                  可同時選擇多個空位；點已有人的位子會標記為待取消，能一次取消多個
+                </p>
               </div>
             </div>
             <div className="legend">
@@ -446,6 +491,10 @@ export default function LunchPicker() {
               <span>
                 <i className="seat occupied" />
                 已有人
+              </span>
+              <span>
+                <i className="seat to-cancel" />
+                待取消
               </span>
             </div>
           </div>
@@ -568,13 +617,15 @@ export default function LunchPicker() {
                           <span className="floor-dots">
                             {seatNumbersOf(item).map((seatNumber) => {
                               const seatKey = lunchSeatKey(item.id, seatNumber);
-                              const state = reservationMap.has(seatKey)
-                                ? "taken"
-                                : selectedSeats.some(
-                                      (seat) => seat.seatKey === seatKey,
-                                    )
-                                  ? "picked"
-                                  : "free";
+                              const state = cancelKeys.includes(seatKey)
+                                ? "cancelling"
+                                : reservationMap.has(seatKey)
+                                  ? "taken"
+                                  : selectedSeats.some(
+                                        (seat) => seat.seatKey === seatKey,
+                                      )
+                                    ? "picked"
+                                    : "free";
                               return <i className={state} key={seatKey} />;
                             })}
                           </span>
@@ -658,6 +709,36 @@ export default function LunchPicker() {
               {saving ? "處理中…" : `確認選擇 ${selectedSeats.length || ""} 位`}
             </button>
           </div>
+
+          {cancelKeys.length > 0 && (
+            <div className="confirm-bar cancel-bar">
+              <div>
+                <span>已標記 {cancelKeys.length} 個位子要取消</span>
+                <strong>
+                  {cancelKeys
+                    .map((key) => reservationMap.get(key))
+                    .filter(Boolean)
+                    .map(
+                      (item) =>
+                        `${lunchSeatLabel(item!.tableId, item!.seatNumber)}（${item!.name}）`,
+                    )
+                    .join("、")}
+                </strong>
+              </div>
+              <div className="cancel-bar-actions">
+                <button
+                  className="ghost"
+                  onClick={() => setCancelKeys([])}
+                  disabled={saving}
+                >
+                  清除標記
+                </button>
+                <button onClick={cancelSelected} disabled={saving}>
+                  {saving ? "處理中…" : `取消這 ${cancelKeys.length} 個位子`}
+                </button>
+              </div>
+            </div>
+          )}
           {message && (
             <p className="message" role="status">
               {message}
@@ -736,7 +817,7 @@ export default function LunchPicker() {
                   {plates.map((item) => (
                     <tr key={item.plate}>
                       <td>
-                        <b>{item.plate}</b>
+                        <b>{formatPlate(item.plate)}</b>
                       </td>
                       <td>{item.name}</td>
                       <td>{item.note || "—"}</td>
@@ -775,21 +856,53 @@ export default function LunchPicker() {
           {showList && (
             <div className="roster-content">
               <div className="roster-actions">
-                <p>名單每 5 秒自動更新，所有人都可以取消位子後重新選。</p>
-                <button onClick={downloadSeatCsv} disabled={!reservations.length}>
-                  下載座位 CSV
-                </button>
+                <p>
+                  名單每 5 秒自動更新。勾選左邊的方框可以一次取消多個位子，
+                  {cancelKeys.length > 0 && (
+                    <b>目前已勾選 {cancelKeys.length} 個。</b>
+                  )}
+                </p>
+                <div className="roster-buttons">
+                  <button
+                    className="danger"
+                    onClick={cancelSelected}
+                    disabled={!cancelKeys.length || saving}
+                  >
+                    {saving
+                      ? "處理中…"
+                      : `取消所選${cancelKeys.length ? ` ${cancelKeys.length} 個` : ""}`}
+                  </button>
+                  <button onClick={downloadSeatCsv} disabled={!reservations.length}>
+                    下載座位 CSV
+                  </button>
+                </div>
               </div>
               {reservations.length ? (
                 <div className="table-wrap">
                   <table>
                     <thead>
                       <tr>
+                        <th className="check-cell">
+                          <input
+                            type="checkbox"
+                            aria-label="全選"
+                            checked={
+                              cancelKeys.length > 0 &&
+                              cancelKeys.length === reservations.length
+                            }
+                            onChange={(event) =>
+                              setCancelKeys(
+                                event.target.checked
+                                  ? reservations.map((item) => item.seatKey)
+                                  : [],
+                              )
+                            }
+                          />
+                        </th>
                         <th>桌號</th>
                         <th>位子</th>
                         <th>姓名</th>
                         <th>部門／備註</th>
-                        <th>操作</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -803,7 +916,21 @@ export default function LunchPicker() {
                         .map((item) => {
                           const table = tableById.get(item.tableId);
                           return (
-                          <tr key={item.seatKey}>
+                          <tr
+                            key={item.seatKey}
+                            className={
+                              cancelKeys.includes(item.seatKey) ? "marked" : ""
+                            }
+                          >
+                            <td className="check-cell">
+                              <input
+                                type="checkbox"
+                                aria-label={`選取 ${lunchSeatLabel(item.tableId, item.seatNumber)}`}
+                                checked={cancelKeys.includes(item.seatKey)}
+                                onChange={() => toggleCancel(item.seatKey)}
+                                disabled={saving}
+                              />
+                            </td>
                             <td>
                               {item.tableId}
                               {table && allowsBabySeat(table) && (
@@ -815,15 +942,6 @@ export default function LunchPicker() {
                             <td>{item.seatNumber} 號位</td>
                             <td>{item.name}</td>
                             <td>{item.note || "—"}</td>
-                            <td>
-                              <button
-                                className="table-action"
-                                onClick={() => cancelReservation(item)}
-                                disabled={saving}
-                              >
-                                取消
-                              </button>
-                            </td>
                           </tr>
                           );
                         })}

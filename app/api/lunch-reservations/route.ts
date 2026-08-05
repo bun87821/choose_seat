@@ -126,17 +126,32 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     await ensureLunchSchema();
-    const payload = (await request.json()) as { seatKey?: string };
-    const seatKey = payload.seatKey?.trim() ?? "";
+    const payload = (await request.json()) as {
+      seatKey?: string;
+      seatKeys?: string[];
+    };
+    // 舊的單筆格式仍然可用，新的批次取消則帶 seatKeys。
+    const seatKeys = Array.from(
+      new Set(
+        (payload.seatKeys ?? (payload.seatKey ? [payload.seatKey] : []))
+          .map((item) => String(item).trim())
+          .filter(Boolean),
+      ),
+    );
 
-    if (!seatKey || !validLunchSeatKeys.has(seatKey)) {
+    if (
+      !seatKeys.length ||
+      seatKeys.length > LUNCH_TOTAL_SEATS ||
+      seatKeys.some((seatKey) => !validLunchSeatKeys.has(seatKey))
+    ) {
       return Response.json({ error: "無效的座位資料" }, { status: 400 });
     }
 
-    await pool.query("DELETE FROM lunch_reservations WHERE seat_key = $1", [
-      seatKey,
-    ]);
-    return Response.json({ ok: true });
+    const result = await pool.query(
+      "DELETE FROM lunch_reservations WHERE seat_key = ANY($1::text[])",
+      [seatKeys],
+    );
+    return Response.json({ ok: true, removed: result.rowCount ?? 0 });
   } catch (error) {
     console.error("DELETE /api/lunch-reservations failed", error);
     return Response.json({ error: "取消失敗" }, { status: 500 });
