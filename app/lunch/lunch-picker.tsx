@@ -67,7 +67,7 @@ export default function LunchPicker() {
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [partySize, setPartySize] = useState(1);
-  const [activeZone, setActiveZone] = useState<"R" | "B">("R");
+  const [activeZone, setActiveZone] = useState<"R" | "B">("B");
   const [viewMode, setViewMode] = useState<"map" | "list">("list");
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
