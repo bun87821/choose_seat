@@ -262,6 +262,89 @@ export async function PUT(request: Request) {
   }
 }
 
+type SeatOccupant = {
+  name: string;
+  note: string;
+  created_at: Date;
+};
+
+/** 兩張桌子的人整批對調：A 桌的人全部坐到 B 桌，B 桌的人全部坐到 A 桌。 */
+async function swapWholeTables(
+  client: import("pg").PoolClient,
+  aId: string,
+  bId: string,
+) {
+  const a = tableById.get(aId);
+  const b = tableById.get(bId);
+  if (!a || !b || a.id === b.id) {
+    return Response.json({ error: "請確認要對調的兩張桌子。" }, { status: 400 });
+  }
+
+  await client.query("BEGIN");
+  const rows = await client.query<SeatOccupant & { table_id: string; seat_number: number }>(
+    `SELECT table_id, seat_number, name, note, created_at
+     FROM lunch_reservations
+     WHERE table_id = ANY($1::text[])
+     ORDER BY table_id, seat_number
+     FOR UPDATE`,
+    [[a.id, b.id]],
+  );
+  const aPeople = rows.rows.filter((row) => row.table_id === a.id);
+  const bPeople = rows.rows.filter((row) => row.table_id === b.id);
+
+  if (!aPeople.length && !bPeople.length) {
+    await client.query("ROLLBACK");
+    return Response.json({ error: "這兩張桌子目前都沒有人。" }, { status: 400 });
+  }
+  if (aPeople.length > b.capacity) {
+    await client.query("ROLLBACK");
+    return Response.json(
+      { error: `${a.id} 桌有 ${aPeople.length} 位，${b.id} 桌只能坐 ${b.capacity} 位。` },
+      { status: 409 },
+    );
+  }
+  if (bPeople.length > a.capacity) {
+    await client.query("ROLLBACK");
+    return Response.json(
+      { error: `${b.id} 桌有 ${bPeople.length} 位，${a.id} 桌只能坐 ${a.capacity} 位。` },
+      { status: 409 },
+    );
+  }
+
+  await client.query(
+    "DELETE FROM lunch_reservations WHERE table_id = ANY($1::text[])",
+    [[a.id, b.id]],
+  );
+
+  const seat = async (tableId: string, people: SeatOccupant[]) => {
+    for (const [index, person] of people.entries()) {
+      const seatNumber = index + 1;
+      await client.query(
+        `INSERT INTO lunch_reservations
+          (seat_key, table_id, seat_number, name, note, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          lunchSeatKey(tableId, seatNumber),
+          tableId,
+          seatNumber,
+          person.name,
+          person.note,
+          person.created_at,
+        ],
+      );
+    }
+  };
+
+  await seat(b.id, aPeople);
+  await seat(a.id, bPeople);
+
+  await client.query("COMMIT");
+  return Response.json({
+    ok: true,
+    swapped: { [a.id]: aPeople.length, [b.id]: bPeople.length },
+  });
+}
+
 /** 把一批已經劃走的位子整批搬到另一張桌子，姓名與備註跟著走。 */
 export async function PATCH(request: Request) {
   const client = await pool.connect();
@@ -270,7 +353,17 @@ export async function PATCH(request: Request) {
     const payload = (await request.json()) as {
       seatKeys?: string[];
       targetTableId?: string;
+      /** 兩張桌子的人整批對調。 */
+      swapTables?: { a?: string; b?: string };
     };
+
+    if (payload.swapTables) {
+      return await swapWholeTables(
+        client,
+        String(payload.swapTables.a ?? ""),
+        String(payload.swapTables.b ?? ""),
+      );
+    }
     const seatKeys = Array.from(
       new Set((payload.seatKeys ?? []).map((item) => String(item).trim())),
     ).filter(Boolean);

@@ -176,7 +176,46 @@ export default function LunchPicker() {
       );
   }, [cancelKeys, reservationMap, reservations]);
 
-  const moveTargetValid = moveOptions.some(({ item }) => item.id === moveTarget);
+  /** 選取的剛好是某一桌的全部人時，才有「整桌對調」可選。 */
+  const wholeTableSelected = useMemo(() => {
+    if (!cancelKeys.length) return null;
+    const picked = cancelKeys
+      .map((key) => reservationMap.get(key))
+      .filter((item): item is LunchReservation => Boolean(item));
+    const tableIds = new Set(picked.map((item) => item.tableId));
+    if (tableIds.size !== 1) return null;
+    const tableId = [...tableIds][0];
+    const occupants = reservations.filter((item) => item.tableId === tableId);
+    return occupants.length === picked.length ? tableId : null;
+  }, [cancelKeys, reservationMap, reservations]);
+
+  /** 可以跟目前這桌整批對調的桌子：兩邊的人數都要坐得下對方。 */
+  const swapOptions = useMemo(() => {
+    if (!wholeTableSelected) return [];
+    const source = tableById.get(wholeTableSelected);
+    if (!source) return [];
+    const occupiedByTable = new Map<string, number>();
+    for (const reservation of reservations) {
+      occupiedByTable.set(
+        reservation.tableId,
+        (occupiedByTable.get(reservation.tableId) ?? 0) + 1,
+      );
+    }
+    return lunchTables
+      .map((item) => ({ item, people: occupiedByTable.get(item.id) ?? 0 }))
+      .filter(
+        ({ item, people }) =>
+          item.id !== source.id &&
+          people > 0 &&
+          people <= source.capacity &&
+          cancelKeys.length <= item.capacity,
+      );
+  }, [wholeTableSelected, reservations, cancelKeys.length]);
+
+  const moveTargetValid =
+    moveOptions.some(({ item }) => item.id === moveTarget) ||
+    swapOptions.some(({ item }) => `swap:${item.id}` === moveTarget);
+  const isSwapTarget = moveTarget.startsWith("swap:");
 
   function toggleSeat(seat: SelectedSeat) {
     setSelectedSeats((current) =>
@@ -335,7 +374,48 @@ export default function LunchPicker() {
     }
   }
 
+  /** 兩張桌子的人整批對調。 */
+  async function swapWholeTables() {
+    const source = wholeTableSelected;
+    const other = tableById.get(moveTarget.slice("swap:".length));
+    if (!source || !other) return;
+    const sourceCount = cancelKeys.length;
+    const otherCount = reservations.filter(
+      (item) => item.tableId === other.id,
+    ).length;
+
+    const confirmed = window.confirm(
+      `要把 ${source} 桌的 ${sourceCount} 位與 ${other.id} 桌的 ${otherCount} 位整桌對調嗎？`,
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/lunch-reservations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ swapTables: { a: source, b: other.id } }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "對調失敗");
+      await loadAll(true);
+      setMessage(`已把 ${source} 桌與 ${other.id} 桌整桌對調。`);
+      setCancelKeys([]);
+      setMoveTarget("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "對調失敗，請再試一次。");
+      await loadAll(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function moveSelected() {
+    if (isSwapTarget) {
+      await swapWholeTables();
+      return;
+    }
     const targets = cancelKeys
       .map((key) => reservationMap.get(key))
       .filter((item): item is LunchReservation => Boolean(item));
@@ -970,23 +1050,37 @@ export default function LunchPicker() {
                     aria-label="換到哪一桌"
                   >
                     <option value="">
-                      {moveOptions.length
+                      {moveOptions.length || swapOptions.length
                         ? "換到哪一桌…"
                         : `沒有桌子能一次容納 ${cancelKeys.length} 位`}
                     </option>
-                    {moveOptions.map(({ item, freeAfter }) => (
-                      <option key={item.id} value={item.id}>
-                        {item.id}（空 {freeAfter} / {item.capacity} 位）
-                        {allowsBabySeat(item) ? " 🍼" : ""}
-                      </option>
-                    ))}
+                    {moveOptions.length > 0 && (
+                      <optgroup label="搬到空位">
+                        {moveOptions.map(({ item, freeAfter }) => (
+                          <option key={item.id} value={item.id}>
+                            {item.id}（空 {freeAfter} / {item.capacity} 位）
+                            {allowsBabySeat(item) ? " 🍼" : ""}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {swapOptions.length > 0 && (
+                      <optgroup label="與整桌對調">
+                        {swapOptions.map(({ item, people }) => (
+                          <option key={item.id} value={`swap:${item.id}`}>
+                            {item.id}（目前 {people} 位）
+                            {allowsBabySeat(item) ? " 🍼" : ""}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                   <button
                     className="move"
                     onClick={moveSelected}
                     disabled={saving || !moveTargetValid}
                   >
-                    {saving ? "處理中…" : "整批換桌"}
+                    {saving ? "處理中…" : isSwapTarget ? "整桌對調" : "整批換桌"}
                   </button>
                 </div>
                 <button onClick={cancelSelected} disabled={saving}>
@@ -1128,23 +1222,37 @@ export default function LunchPicker() {
                         aria-label="換到哪一桌"
                       >
                         <option value="">
-                          {moveOptions.length
+                          {moveOptions.length || swapOptions.length
                             ? "換到哪一桌…"
                             : `沒有桌子能一次容納 ${cancelKeys.length} 位`}
                         </option>
-                        {moveOptions.map(({ item, freeAfter }) => (
-                          <option key={item.id} value={item.id}>
-                            {item.id}（空 {freeAfter} / {item.capacity} 位）
-                            {allowsBabySeat(item) ? " 🍼" : ""}
-                          </option>
-                        ))}
+                        {moveOptions.length > 0 && (
+                          <optgroup label="搬到空位">
+                            {moveOptions.map(({ item, freeAfter }) => (
+                              <option key={item.id} value={item.id}>
+                                {item.id}（空 {freeAfter} / {item.capacity} 位）
+                                {allowsBabySeat(item) ? " 🍼" : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {swapOptions.length > 0 && (
+                          <optgroup label="與整桌對調">
+                            {swapOptions.map(({ item, people }) => (
+                              <option key={item.id} value={`swap:${item.id}`}>
+                                {item.id}（目前 {people} 位）
+                                {allowsBabySeat(item) ? " 🍼" : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       <button
                         className="move"
                         onClick={moveSelected}
                         disabled={saving || !moveTargetValid}
                       >
-                        整批換桌
+                        {isSwapTarget ? "整桌對調" : "整批換桌"}
                       </button>
                     </div>
                   )}
