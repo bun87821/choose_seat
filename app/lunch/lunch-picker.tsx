@@ -1177,9 +1177,14 @@ export default function LunchPicker() {
                 </button>
                 <div className="move-control">
                   <select
+                    className={
+                      !moveTargetValid && (moveOptions.length || swapOptions.length)
+                        ? "needs-choice"
+                        : ""
+                    }
                     value={moveTargetValid ? moveTarget : ""}
                     onChange={(event) => setMoveTarget(event.target.value)}
-                    disabled={saving || !moveOptions.length}
+                    disabled={saving || !(moveOptions.length || swapOptions.length)}
                     aria-label="換到哪一桌"
                   >
                     <option value="">
@@ -1213,7 +1218,13 @@ export default function LunchPicker() {
                     onClick={moveSelected}
                     disabled={saving || !moveTargetValid}
                   >
-                    {saving ? "處理中…" : isSwapTarget ? "整桌對調" : "整批換桌"}
+                    {saving
+                      ? "處理中…"
+                      : !moveTargetValid
+                        ? "先選目標桌"
+                        : isSwapTarget
+                          ? "整桌對調"
+                          : "整批換桌"}
                   </button>
                 </div>
                 <button onClick={cancelSelected} disabled={saving}>
@@ -1379,9 +1390,17 @@ export default function LunchPicker() {
                   {cancelKeys.length > 0 && (
                     <div className="move-control">
                       <select
+                        className={
+                          !moveTargetValid &&
+                          (moveOptions.length || swapOptions.length)
+                            ? "needs-choice"
+                            : ""
+                        }
                         value={moveTargetValid ? moveTarget : ""}
                         onChange={(event) => setMoveTarget(event.target.value)}
-                        disabled={saving || !moveOptions.length}
+                        disabled={
+                          saving || !(moveOptions.length || swapOptions.length)
+                        }
                         aria-label="換到哪一桌"
                       >
                         <option value="">
@@ -1415,7 +1434,11 @@ export default function LunchPicker() {
                         onClick={moveSelected}
                         disabled={saving || !moveTargetValid}
                       >
-                        {isSwapTarget ? "整桌對調" : "整批換桌"}
+                        {!moveTargetValid
+                          ? "先選目標桌"
+                          : isSwapTarget
+                            ? "整桌對調"
+                            : "整批換桌"}
                       </button>
                     </div>
                   )}

@@ -323,14 +323,18 @@ input:disabled { color: #718078; background: #eef2ee; }
 /* .confirm-bar div 會把裡面的 div 變成 grid，這裡要用同等特異性蓋回來。 */
 .cancel-bar .cancel-bar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .cancel-bar .move-control { display: flex; align-items: center; gap: 8px; }
-.cancel-bar button { min-width: 0; padding: 13px 20px; border: 0; border-radius: 11px; color: white; background: #c9563f; font-weight: 800; white-space: nowrap; cursor: pointer; box-shadow: 0 7px 16px rgba(201,86,63,.22); }
+/* 取消是破壞性動作，做成外框樣式，讓換桌／對調成為主要按鈕。 */
+.cancel-bar button { min-width: 0; padding: 12px 19px; border: 1px solid #d9a494; border-radius: 11px; color: #a8452e; background: white; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.cancel-bar button:hover:not(:disabled) { border-color: #c9563f; background: #fdf1ee; }
 .cancel-bar button.ghost { padding: 12px 16px; border: 1px solid #c3d6e0; color: #4a7186; background: white; box-shadow: none; }
-.cancel-bar button:disabled { color: #a5aea8; background: #dfe3e0; box-shadow: none; cursor: not-allowed; }
+.cancel-bar button:disabled { border-color: #dfe3e0; color: #a5aea8; background: #f2f4f2; box-shadow: none; cursor: not-allowed; }
 .floor-table .floor-dots i.cancelling { background: #2f6f8f; }
 
 .move-control { display: flex; align-items: center; gap: 8px; }
 .move-control select { height: 46px; max-width: 230px; padding: 0 12px; border: 1px solid #b6cedb; border-radius: 11px; color: var(--ink); background: white; font: inherit; font-size: 13px; cursor: pointer; }
 .move-control select:disabled { color: #96a3a9; background: #eef2f4; cursor: not-allowed; }
+/* 還沒挑目標桌時把下拉標出來，才不會以為換桌鈕壞掉。 */
+.move-control select.needs-choice { border-color: #d9a83a; background: #fffbf1; box-shadow: 0 0 0 3px rgba(217,168,58,.2); }
 .cancel-bar button.move, .roster-buttons button.move { min-width: 120px; border: 0; color: white; background: #2f6f8f; box-shadow: 0 7px 16px rgba(47,111,143,.22); }
 .cancel-bar button.move:disabled, .roster-buttons button.move:disabled { color: #a5aea8; background: #dfe3e0; box-shadow: none; }
 .pick-table { width: 100%; margin: 0 0 9px; padding: 5px; border: 1px solid #b6cedb; border-radius: 8px; color: #2f6f8f; background: #f1f7fb; font-size: 11px; font-weight: 800; cursor: pointer; }
