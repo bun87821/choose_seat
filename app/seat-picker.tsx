@@ -248,9 +248,19 @@ export default function SeatPicker() {
             <span className="live-dot" />
             座位即時更新
           </div>
-          <div className="seat-count">
-            <strong>{availableCount}</strong> 席可選
-            <span>/ 共 {BASEBALL_TOTAL_SEATS} 席</span>
+          <div className="status-actions">
+            <Link
+              className="print-link"
+              href="/print/baseball"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              列印 A4 座位表
+            </Link>
+            <div className="seat-count">
+              <strong>{availableCount}</strong> 席可選
+              <span>/ 共 {BASEBALL_TOTAL_SEATS} 席</span>
+            </div>
           </div>
         </div>
 

@@ -28,3 +28,11 @@ test("print stylesheet declares one-page A4 landscape output", () => {
   assert.match(css, /\.print-toolbar\s*{[^}]*display:\s*none\s*!important;/s);
   assert.match(css, /\.print-sheet\s*{[^}]*height:\s*194mm;/s);
 });
+
+test("both seat pickers link to their print views", () => {
+  const baseballPicker = source("app/seat-picker.tsx");
+  const lunchPicker = source("app/lunch/lunch-picker.tsx");
+
+  assert.match(baseballPicker, /href=["']\/print\/baseball["']/);
+  assert.match(lunchPicker, /href=["']\/print\/lunch["']/);
+});
