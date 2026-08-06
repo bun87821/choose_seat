@@ -1,4 +1,5 @@
 import { ensureSchema, pool } from "@/lib/db";
+import { isCorrectPassword, passwordRejected } from "@/lib/seat-password";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -167,7 +168,12 @@ export async function PUT(request: Request) {
   const client = await pool.connect();
   try {
     await ensureSchema();
-    const payload = (await request.json()) as { from?: string; to?: string };
+    const payload = (await request.json()) as {
+      from?: string;
+      to?: string;
+      password?: string;
+    };
+    if (!isCorrectPassword(payload.password)) return passwordRejected();
     const from = payload.from?.trim() ?? "";
     const to = payload.to?.trim() ?? "";
 
@@ -260,7 +266,9 @@ export async function DELETE(request: Request) {
     await ensureSchema();
     const payload = (await request.json()) as {
       seatKey?: string;
+      password?: string;
     };
+    if (!isCorrectPassword(payload.password)) return passwordRejected();
     const seatKey = payload.seatKey?.trim() ?? "";
 
     if (!seatKey || !validSeats.has(seatKey)) {

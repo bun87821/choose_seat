@@ -19,6 +19,10 @@ import {
 } from "@/lib/lunch-tables";
 import { formatPlate, isValidPlate, normalizePlate } from "@/lib/plate";
 import { guestName, MAX_PARTY_SIZE } from "@/lib/seat-assign";
+import {
+  askEditPassword,
+  handlePasswordRejection,
+} from "@/lib/edit-password-client";
 
 type LunchReservation = {
   seatKey: string;
@@ -390,14 +394,23 @@ export default function LunchPicker() {
     );
     if (!confirmed) return;
 
+    const password = askEditPassword("取消位子");
+    if (!password) return;
+
     setSaving(true);
     setMessage("");
     try {
       const response = await fetch("/api/lunch-reservations", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seatKeys: targets.map((item) => item.seatKey) }),
+        body: JSON.stringify({
+          seatKeys: targets.map((item) => item.seatKey),
+          password,
+        }),
       });
+      if (handlePasswordRejection(response.status)) {
+        throw new Error("確認密碼不正確，請再試一次。");
+      }
       if (!response.ok) throw new Error("取消失敗");
       await loadAll(true);
       setMessage(`已取消 ${targets.length} 個位子。`);
@@ -442,13 +455,17 @@ export default function LunchPicker() {
     );
     if (!confirmed) return;
 
+    const password = askEditPassword("換位");
+    if (!password) return;
+
     setSaving(true);
     try {
       const response = await fetch("/api/lunch-reservations", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: swapFrom, to: seatKey }),
+        body: JSON.stringify({ from: swapFrom, to: seatKey, password }),
       });
+      handlePasswordRejection(response.status);
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "換位失敗");
       await loadAll(true);
@@ -482,14 +499,21 @@ export default function LunchPicker() {
     );
     if (!confirmed) return;
 
+    const password = askEditPassword("整桌對調");
+    if (!password) return;
+
     setSaving(true);
     setMessage("");
     try {
       const response = await fetch("/api/lunch-reservations", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ swapTables: { a: source, b: other.id } }),
+        body: JSON.stringify({
+          swapTables: { a: source, b: other.id },
+          password,
+        }),
       });
+      handlePasswordRejection(response.status);
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "對調失敗");
       await loadAll(true);
@@ -524,6 +548,9 @@ export default function LunchPicker() {
     );
     if (!confirmed) return;
 
+    const password = askEditPassword("整批換桌");
+    if (!password) return;
+
     setSaving(true);
     setMessage("");
     try {
@@ -533,8 +560,10 @@ export default function LunchPicker() {
         body: JSON.stringify({
           seatKeys: targets.map((item) => item.seatKey),
           targetTableId: destination.id,
+          password,
         }),
       });
+      handlePasswordRejection(response.status);
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "換桌失敗");
       await loadAll(true);

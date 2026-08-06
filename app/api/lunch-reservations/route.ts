@@ -1,4 +1,5 @@
 import { ensureLunchSchema, pool } from "@/lib/db";
+import { isCorrectPassword, passwordRejected } from "@/lib/seat-password";
 import {
   LUNCH_TOTAL_SEATS,
   lunchSeatKey,
@@ -185,7 +186,12 @@ export async function PUT(request: Request) {
   const client = await pool.connect();
   try {
     await ensureLunchSchema();
-    const payload = (await request.json()) as { from?: string; to?: string };
+    const payload = (await request.json()) as {
+      from?: string;
+      to?: string;
+      password?: string;
+    };
+    if (!isCorrectPassword(payload.password)) return passwordRejected();
     const from = payload.from?.trim() ?? "";
     const to = payload.to?.trim() ?? "";
 
@@ -355,7 +361,9 @@ export async function PATCH(request: Request) {
       targetTableId?: string;
       /** 兩張桌子的人整批對調。 */
       swapTables?: { a?: string; b?: string };
+      password?: string;
     };
+    if (!isCorrectPassword(payload.password)) return passwordRejected();
 
     if (payload.swapTables) {
       return await swapWholeTables(
@@ -475,7 +483,9 @@ export async function DELETE(request: Request) {
     const payload = (await request.json()) as {
       seatKey?: string;
       seatKeys?: string[];
+      password?: string;
     };
+    if (!isCorrectPassword(payload.password)) return passwordRejected();
     // 舊的單筆格式仍然可用，新的批次取消則帶 seatKeys。
     const seatKeys = Array.from(
       new Set(

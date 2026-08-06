@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  askEditPassword,
+  handlePasswordRejection,
+} from "@/lib/edit-password-client";
 
 type Reservation = {
   seatKey: string;
@@ -139,18 +143,25 @@ export default function SeatPicker() {
 
   async function cancelReservation(reservation: Reservation) {
     if (!window.confirm(`確定取消 ${reservation.name} 的 ${seatLabel(reservation)} 嗎？`)) return;
+    const password = askEditPassword("取消座位");
+    if (!password) return;
     setSaving(true);
     try {
       const response = await fetch("/api/reservations", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seatKey: reservation.seatKey }),
+        body: JSON.stringify({ seatKey: reservation.seatKey, password }),
       });
+      if (handlePasswordRejection(response.status)) {
+        throw new Error("確認密碼不正確，請再試一次。");
+      }
       if (!response.ok) throw new Error("取消失敗");
       await loadReservations(true);
       setMessage(`已取消 ${seatLabel(reservation)}。`);
-    } catch {
-      setMessage("取消失敗，請稍後再試。");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "取消失敗，請稍後再試。",
+      );
     } finally {
       setSaving(false);
     }
@@ -185,13 +196,17 @@ export default function SeatPicker() {
     );
     if (!confirmed) return;
 
+    const password = askEditPassword("換位");
+    if (!password) return;
+
     setSaving(true);
     try {
       const response = await fetch("/api/reservations", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: swapFrom, to: seatKey }),
+        body: JSON.stringify({ from: swapFrom, to: seatKey, password }),
       });
+      handlePasswordRejection(response.status);
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "換位失敗");
       await loadReservations(true);
