@@ -26,7 +26,20 @@ test("print stylesheet declares one-page A4 landscape output", () => {
 
   assert.match(css, /@page\s*{[^}]*size:\s*A4 landscape;/s);
   assert.match(css, /\.print-toolbar\s*{[^}]*display:\s*none\s*!important;/s);
-  assert.match(css, /\.print-sheet\s*{[^}]*height:\s*194mm;/s);
+  assert.match(css, /\.print-sheet\s*{[^}]*height:\s*192mm;/s);
+  assert.match(css, /html, body\s*{[^}]*min-height:\s*0;/s);
+  assert.match(
+    css,
+    /\.lunch-table-grid\s*{[^}]*grid-template-columns:\s*repeat\(5,/s,
+  );
+  assert.match(
+    css,
+    /\.lunch-table-grid\s*{[^}]*grid-template-rows:\s*repeat\(9,/s,
+  );
+  assert.match(
+    css,
+    /\.lunch-seat-grid\s*{[^}]*grid-template-columns:\s*repeat\(2,/s,
+  );
 });
 
 test("both seat pickers link to their print views", () => {
