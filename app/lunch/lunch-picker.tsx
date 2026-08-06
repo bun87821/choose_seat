@@ -968,7 +968,7 @@ export default function LunchPicker() {
               <img src="/lunch-floorplan.jpg" alt="0807 午餐座位平面圖" />
               <figcaption>
                 英文＋數字為桌號，米字號數字為每桌可安排人數。圖上標示 194 位，實際
-                R06、R07 改為 4 人桌，本次共 {LUNCH_TOTAL_SEATS} 位。
+                R05、R06、R07 改為 4 人桌，本次共 {LUNCH_TOTAL_SEATS} 位。
               </figcaption>
             </figure>
           )}
