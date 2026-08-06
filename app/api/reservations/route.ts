@@ -1,3 +1,7 @@
+import {
+  BASEBALL_TOTAL_SEATS,
+  validBaseballSeatKeys,
+} from "@/lib/baseball-seats";
 import { ensureSchema, pool } from "@/lib/db";
 import { isCorrectPassword, passwordRejected } from "@/lib/seat-password";
 
@@ -13,20 +17,6 @@ type ReservationRow = {
   note: string;
   created_at: Date | string;
 };
-
-const TOTAL_SEATS = 71;
-
-const validSeats = new Set([
-  ...[12, 13, 14].flatMap((row) =>
-    Array.from({ length: 9 }, (_, index) => `B1-${row}-${index + 4}`),
-  ),
-  ...Array.from({ length: 8 }, (_, index) => `B1-15-${index + 5}`),
-  ...Array.from({ length: 10 }, (_, index) => `B1-16-${index + 5}`),
-  ...Array.from({ length: 6 }, (_, index) => `B2-14-${index + 7}`),
-  ...[15, 16].flatMap((row) =>
-    Array.from({ length: 10 }, (_, index) => `B2-${row}-${index + 5}`),
-  ),
-]);
 
 function serialize(row: ReservationRow) {
   return {
@@ -89,11 +79,11 @@ export async function POST(request: Request) {
 
     if (
       !seats.length ||
-      seats.length > TOTAL_SEATS ||
+      seats.length > BASEBALL_TOTAL_SEATS ||
       new Set(seats.map((seat) => seat.key)).size !== seats.length ||
       seats.some((seat) => {
         const seatKey = `${seat.section}-${Number(seat.row)}-${Number(seat.number)}`;
-        return seat.key !== seatKey || !validSeats.has(seatKey);
+        return seat.key !== seatKey || !validBaseballSeatKeys.has(seatKey);
       })
     ) {
       return Response.json(
@@ -177,7 +167,11 @@ export async function PUT(request: Request) {
     const from = payload.from?.trim() ?? "";
     const to = payload.to?.trim() ?? "";
 
-    if (!validSeats.has(from) || !validSeats.has(to) || from === to) {
+    if (
+      !validBaseballSeatKeys.has(from) ||
+      !validBaseballSeatKeys.has(to) ||
+      from === to
+    ) {
       return Response.json({ error: "請確認要交換的兩個位子。" }, { status: 400 });
     }
 
@@ -271,7 +265,7 @@ export async function DELETE(request: Request) {
     if (!isCorrectPassword(payload.password)) return passwordRejected();
     const seatKey = payload.seatKey?.trim() ?? "";
 
-    if (!seatKey || !validSeats.has(seatKey)) {
+    if (!seatKey || !validBaseballSeatKeys.has(seatKey)) {
       return Response.json({ error: "無效的劃位資料" }, { status: 400 });
     }
 

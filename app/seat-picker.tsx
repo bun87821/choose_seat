@@ -3,13 +3,20 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  BASEBALL_TOTAL_SEATS,
+  baseballSeatLabel,
+  baseballSectionSeats,
+  type BaseballSeat,
+  type BaseballSection,
+} from "@/lib/baseball-seats";
+import {
   askEditPassword,
   handlePasswordRejection,
 } from "@/lib/edit-password-client";
 
 type Reservation = {
   seatKey: string;
-  section: "B1" | "B2";
+  section: BaseballSection;
   row: number;
   number: number;
   name: string;
@@ -17,51 +24,12 @@ type Reservation = {
   createdAt: string;
 };
 
-type Seat = {
-  key: string;
-  section: "B1" | "B2";
-  row: number;
-  number: number;
-};
-
-const TOTAL_SEATS = 71;
-
-const sectionSeats: Record<"B1" | "B2", Seat[]> = {
-  B1: [
-    ...[12, 13, 14].flatMap((row) =>
-      Array.from({ length: 9 }, (_, index) => ({ row, number: index + 4 })),
-    ),
-    ...Array.from({ length: 8 }, (_, index) => ({ row: 15, number: index + 5 })),
-    ...Array.from({ length: 10 }, (_, index) => ({ row: 16, number: index + 5 })),
-  ].map(({ row, number }) => ({
-    key: `B1-${row}-${number}`,
-    section: "B1" as const,
-    row,
-    number,
-  })),
-  B2: [
-    ...Array.from({ length: 6 }, (_, index) => ({ row: 14, number: index + 7 })),
-    ...[15, 16].flatMap((row) =>
-      Array.from({ length: 10 }, (_, index) => ({ row, number: index + 5 })),
-    ),
-  ].map(({ row, number }) => ({
-    key: `B2-${row}-${number}`,
-    section: "B2" as const,
-    row,
-    number,
-  })),
-};
-
-function seatLabel(seat: Pick<Seat, "section" | "row" | "number">) {
-  return `${seat.section}｜${seat.row} 排 ${seat.number} 號`;
-}
-
 export default function SeatPicker() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [selectedSeats, setSelectedSeats] = useState<Seat[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<BaseballSeat[]>([]);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
-  const [activeSection, setActiveSection] = useState<"B1" | "B2">("B1");
+  const [activeSection, setActiveSection] = useState<BaseballSection>("B1");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -96,9 +64,9 @@ export default function SeatPicker() {
     [reservations],
   );
 
-  const availableCount = TOTAL_SEATS - reservations.length;
+  const availableCount = BASEBALL_TOTAL_SEATS - reservations.length;
 
-  function toggleSeat(seat: Seat) {
+  function toggleSeat(seat: BaseballSeat) {
     setSelectedSeats((current) =>
       current.some((item) => item.key === seat.key)
         ? current.filter((item) => item.key !== seat.key)
@@ -142,7 +110,7 @@ export default function SeatPicker() {
   }
 
   async function cancelReservation(reservation: Reservation) {
-    if (!window.confirm(`確定取消 ${reservation.name} 的 ${seatLabel(reservation)} 嗎？`)) return;
+    if (!window.confirm(`確定取消 ${reservation.name} 的 ${baseballSeatLabel(reservation)} 嗎？`)) return;
     const password = askEditPassword("取消座位");
     if (!password) return;
     setSaving(true);
@@ -157,7 +125,7 @@ export default function SeatPicker() {
       }
       if (!response.ok) throw new Error("取消失敗");
       await loadReservations(true);
-      setMessage(`已取消 ${seatLabel(reservation)}。`);
+      setMessage(`已取消 ${baseballSeatLabel(reservation)}。`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "取消失敗，請稍後再試。",
@@ -168,7 +136,7 @@ export default function SeatPicker() {
   }
 
   /** 換位模式：第一次點是拿起來，第二次點是換過去或互換。 */
-  async function tapForSwap(seatKey: string, seat: Seat) {
+  async function tapForSwap(seatKey: string, seat: BaseballSeat) {
     setMessage("");
     if (!swapFrom) {
       if (reservationMap.has(seatKey)) setSwapFrom(seatKey);
@@ -187,8 +155,8 @@ export default function SeatPicker() {
       return;
     }
     const target = reservationMap.get(seatKey);
-    const fromLabel = seatLabel(source);
-    const toLabel = seatLabel(seat);
+    const fromLabel = baseballSeatLabel(source);
+    const toLabel = baseballSeatLabel(seat);
     const confirmed = window.confirm(
       target
         ? `要把 ${source.name}（${fromLabel}）和 ${target.name}（${toLabel}）互換嗎？`
@@ -282,7 +250,7 @@ export default function SeatPicker() {
           </div>
           <div className="seat-count">
             <strong>{availableCount}</strong> 席可選
-            <span>/ 共 {TOTAL_SEATS} 席</span>
+            <span>/ 共 {BASEBALL_TOTAL_SEATS} 席</span>
           </div>
         </div>
 
@@ -367,18 +335,18 @@ export default function SeatPicker() {
                   onClick={() => setActiveSection(section)}
                 >
                   <b>{section} 區</b>
-                  <span>{sectionSeats[section].length - occupied} 席可選</span>
+                  <span>{baseballSectionSeats[section].length - occupied} 席可選</span>
                 </button>
               );
             })}
           </div>
 
           <div className="seat-map" aria-busy={loading}>
-            {Array.from(new Set(sectionSeats[activeSection].map((seat) => seat.row))).map((row) => (
+            {Array.from(new Set(baseballSectionSeats[activeSection].map((seat) => seat.row))).map((row) => (
               <div className="seat-row" key={row}>
                 <b>{row} 排</b>
                 <div>
-                  {sectionSeats[activeSection]
+                  {baseballSectionSeats[activeSection]
                     .filter((seat) => seat.row === row)
                     .map((seat) => {
                       const reservation = reservationMap.get(seat.key);
@@ -395,15 +363,15 @@ export default function SeatPicker() {
                                 ? void cancelReservation(reservation)
                                 : toggleSeat(seat)
                           }
-                          aria-label={`${seatLabel(seat)}${reservation ? `，${reservation.name}` : "，可選"}`}
+                          aria-label={`${baseballSeatLabel(seat)}${reservation ? `，${reservation.name}` : "，可選"}`}
                           title={
                             swapMode
                               ? reservation
-                                ? `${reservation.name}・${seatLabel(seat)}・點擊${swapFrom ? "與這位互換" : "拿起來"}`
-                                : `${seatLabel(seat)}・${swapFrom ? "點擊換到這裡" : "空位"}`
+                                ? `${reservation.name}・${baseballSeatLabel(seat)}・點擊${swapFrom ? "與這位互換" : "拿起來"}`
+                                : `${baseballSeatLabel(seat)}・${swapFrom ? "點擊換到這裡" : "空位"}`
                               : reservation
-                                ? `${reservation.name}・${seatLabel(seat)}`
-                                : seatLabel(seat)
+                                ? `${reservation.name}・${baseballSeatLabel(seat)}`
+                                : baseballSeatLabel(seat)
                           }
                         >
                           <span>{seat.number}</span>
@@ -421,7 +389,7 @@ export default function SeatPicker() {
               <span>{selectedSeats.length ? `本次新增 ${selectedSeats.length} 席` : "請至少選擇一個空位"}</span>
               <strong>
                 {selectedSeats.length
-                  ? selectedSeats.map((seat) => seatLabel(seat)).join("、")
+                  ? selectedSeats.map((seat) => baseballSeatLabel(seat)).join("、")
                   : "—"}
               </strong>
             </div>
@@ -456,7 +424,7 @@ export default function SeatPicker() {
                         .sort((a, b) => a.section.localeCompare(b.section) || a.row - b.row || a.number - b.number)
                         .map((item) => (
                           <tr key={item.seatKey}>
-                            <td>{seatLabel(item)}</td>
+                            <td>{baseballSeatLabel(item)}</td>
                             <td>{item.name}</td>
                             <td>{item.note || "—"}</td>
                             <td>
