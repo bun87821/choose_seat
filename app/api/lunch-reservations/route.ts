@@ -495,11 +495,9 @@ export async function DELETE(request: Request) {
       ),
     );
 
-    if (
-      !seatKeys.length ||
-      seatKeys.length > LUNCH_TOTAL_SEATS ||
-      seatKeys.some((seatKey) => !validLunchSeatKeys.has(seatKey))
-    ) {
+    // 這裡不比對 validLunchSeatKeys：桌子人數調整後，
+    // 舊資料可能落在已經不存在的位子上，那些也要能清掉。
+    if (!seatKeys.length || seatKeys.length > LUNCH_TOTAL_SEATS) {
       return Response.json({ error: "無效的座位資料" }, { status: 400 });
     }
 

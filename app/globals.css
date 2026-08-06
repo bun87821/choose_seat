@@ -437,3 +437,6 @@ footer { padding: 28px 0 0; color: #6e7e75; font-size: 12px; text-align: center;
   .roster-buttons button { flex: 1; }
   .page-nav a, .page-nav .current { padding: 10px 8px; font-size: 13px; }
 }
+
+.orphan-note { border-color: #eec9b6; background: #fdf4ee; color: #8a5a3a; }
+.orphan-note button { margin-left: 8px; padding: 4px 11px; border: 1px solid #e3c3b1; border-radius: 8px; background: white; color: #8a4d37; font-size: 12px; font-weight: 800; cursor: pointer; }

@@ -14,6 +14,7 @@ import {
   lunchTables,
   lunchZones,
   tableById,
+  validLunchSeatKeys,
   zoneOfTable,
   type LunchTable,
 } from "@/lib/lunch-tables";
@@ -167,7 +168,14 @@ export default function LunchPicker() {
     return counts;
   }, []);
 
-  const availableCount = LUNCH_TOTAL_SEATS - reservations.length;
+  /** 桌子人數調整後，落在已經不存在的位子上的資料。 */
+  const orphanReservations = useMemo(
+    () => reservations.filter((item) => !validLunchSeatKeys.has(item.seatKey)),
+    [reservations],
+  );
+
+  const availableCount =
+    LUNCH_TOTAL_SEATS - (reservations.length - orphanReservations.length);
 
   /** 用姓名或課別找人；空白就不搜尋。 */
   const searchResults = useMemo(() => {
@@ -840,7 +848,7 @@ export default function LunchPicker() {
               午餐座位，<span>自己挑一桌</span>
             </h1>
             <p className="hero-copy">
-              鄭婉芃（台積電）194 位座位圖・桌號後方數字為每桌可安排人數
+              鄭婉芃（台積電）座位圖・桌號後方數字為每桌可安排人數
             </p>
           </div>
           <div className="event-card">
@@ -850,7 +858,7 @@ export default function LunchPicker() {
             </div>
             <i />
             <div>
-              <b>194</b>
+              <b>{LUNCH_TOTAL_SEATS}</b>
               <span>可選位子</span>
             </div>
           </div>
@@ -957,11 +965,35 @@ export default function LunchPicker() {
           {showPlan && (
             <figure className="plan-figure">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/lunch-floorplan.jpg" alt="0807 午餐 194 位座位平面圖" />
+              <img src="/lunch-floorplan.jpg" alt="0807 午餐座位平面圖" />
               <figcaption>
-                英文＋數字為桌號，米字號數字為每桌可安排人數；總客席數 292 人，本次使用 194 位。
+                英文＋數字為桌號，米字號數字為每桌可安排人數。圖上標示 194 位，實際
+                R06、R07 改為 4 人桌，本次共 {LUNCH_TOTAL_SEATS} 位。
               </figcaption>
             </figure>
+          )}
+
+          {orphanReservations.length > 0 && (
+            <p className="baby-note orphan-note">
+              <span aria-hidden="true">⚠️</span>
+              <span>
+                有 <b>{orphanReservations.length}</b> 筆資料坐在已經被移除的位子上（
+                {orphanReservations
+                  .map(
+                    (item) =>
+                      `${item.name}：${lunchSeatLabel(item.tableId, item.seatNumber)}`,
+                  )
+                  .join("、")}
+                ），座位圖上看不到他們。請幫這幾位重新安排位子。
+                <button
+                  onClick={() =>
+                    setCancelKeys(orphanReservations.map((item) => item.seatKey))
+                  }
+                >
+                  選起來準備處理
+                </button>
+              </span>
+            </p>
           )}
 
           <div className="seat-search">
