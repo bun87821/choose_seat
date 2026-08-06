@@ -30,6 +30,14 @@ test("print stylesheet declares one-page A4 landscape output", () => {
   assert.match(css, /html, body\s*{[^}]*min-height:\s*0;/s);
   assert.match(
     css,
+    /\.baseball-sections\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s,
+  );
+  assert.match(
+    css,
+    /\.baseball-sections\s*{[^}]*grid-template-rows:\s*5fr\s+3fr;/s,
+  );
+  assert.match(
+    css,
     /\.lunch-table-grid\s*{[^}]*grid-template-columns:\s*repeat\(5,/s,
   );
   assert.match(
